@@ -162,7 +162,7 @@ PrefixExpressionNoMap returns PrefixExpression:
 
 PostfixExpressionNoMap returns PostfixExpression:
     PrimaryExpressionNoMap
-    ( {MemberAccess.receiver=current} '.' (entity=[Entity:ID] | entity=[Entity:STRING])
+    ( {AccessExpression.receiver=current} operator=('.'|'?.') (entity=[Entity:ID] | entity=[Entity:STRING]) (withArgs?='(' (args+=Expression (',' args+=Expression)*)? ')')?
     | {IntRangeExpression.from=current} operator=('to'|'..') to=Expression
     | {TypeCastExpression.expr=current} 'as' type=Type
     | {IndexExpression.receiver=current} '[' index=Expression ']'
@@ -239,8 +239,8 @@ PrefixExpression returns PrefixExpression:
 
 PostfixExpression returns PostfixExpression:
     PrimaryExpression
-    ( {MemberAccess.receiver=current} '.' (entity=[Entity:ID] | entity=[Entity:STRING])
-    | {IntRangeExpression.from=current} operator=('..' | 'to') to=Expression
+    ( {AccessExpression.receiver=current} operator=('.'|'?.') (entity=[Entity:ID] | entity=[Entity:STRING]) (withArgs?='(' (args+=Expression (',' args+=Expression)*)? ')')?
+    | {IntRangeExpression.from=current} operator=('..'|'to') to=Expression
     | {TypeCastExpression.expr=current} 'as' type=Type
     | {IndexExpression.receiver=current} '[' index=Expression ']'
     | {CallExpression.receiver=current} '(' (args+=Expression (',' args+=Expression)*)? ')'

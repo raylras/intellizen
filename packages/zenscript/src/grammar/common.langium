@@ -194,16 +194,19 @@ interface PrefixExpression {
     expr: Expression
 }
 
-type PostfixExpression = MemberAccess
+type PostfixExpression = AccessExpression
     | IntRangeExpression
     | TypeCastExpression
     | IndexExpression
     | CallExpression
     | InstanceofExpression
 
-interface MemberAccess {
+interface AccessExpression {
     receiver: Expression
+    operator: '.' | '?.'
     entity: @Entity
+    withArgs?: boolean
+    args?: Expression[]
 }
 
 interface IntRangeExpression {
