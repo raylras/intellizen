@@ -117,23 +117,23 @@ ConditionalExpressionNoMap returns ConditionalExpression:
 ;
 
 LogicalExpressionNoMap returns InfixExpression:
-    BitwiseExpressionNoMap ({ InfixExpression.left=current} operator=('&&'|'||') right=BitwiseExpressionNoMap)*
+    BitwiseExpressionNoMap ({InfixExpression.left=current} operator=('&&'|'||') right=BitwiseExpressionNoMap)*
 ;
 
 BitwiseExpressionNoMap returns InfixExpression:
-    RelationalExpressionNoMap ({ InfixExpression.left=current} operator=('&'|'|'|'^') right=RelationalExpressionNoMap)*
+    RelationalExpressionNoMap ({InfixExpression.left=current} operator=('&'|'|'|'^') right=RelationalExpressionNoMap)*
 ;
 
 RelationalExpressionNoMap returns InfixExpression:
-    AdditiveExpressionNoMap  ({ InfixExpression.left=current} operator=('=='|'!='|'<'|'<='|'>'|'>='|'in'|'has') right=AdditiveExpressionNoMap)*
+    AdditiveExpressionNoMap ({InfixExpression.left=current} operator=('=='|'!='|'<'|'<='|'>'|'>='|'in'|'has') right=AdditiveExpressionNoMap)*
 ;
 
 AdditiveExpressionNoMap returns InfixExpression:
-    MultiplicativeExpressionNoMap ({ InfixExpression.left=current} operator=('+'|'-'|'~') right=MultiplicativeExpressionNoMap)*
+    MultiplicativeExpressionNoMap ({InfixExpression.left=current} operator=('+'|'-'|'~') right=MultiplicativeExpressionNoMap)*
 ;
 
 MultiplicativeExpressionNoMap returns InfixExpression:
-    PrefixExpressionNoMap ({ InfixExpression.left=current} operator=('*'|'/'|'%') right=PrefixExpressionNoMap)*
+    PrefixExpressionNoMap ({InfixExpression.left=current} operator=('*'|'/'|'%') right=PrefixExpressionNoMap)*
 ;
 
 /*
@@ -156,8 +156,8 @@ infix InfixExpressionNoMap on PrefixExpressionNoMap returns InfixExpression:
 */
 
 PrefixExpressionNoMap returns PrefixExpression:
-    PostfixExpressionNoMap |
-    ({PrefixExpression} operator=('!'|'-') expr=PrefixExpressionNoMap)
+    PostfixExpressionNoMap
+    | ({PrefixExpression} operator=('!'|'-') expr=PrefixExpressionNoMap)
 ;
 
 PostfixExpressionNoMap returns PostfixExpression:
@@ -233,8 +233,8 @@ infix InfixExpression on PrefixExpression returns InfixExpression:
 */
 
 PrefixExpression returns PrefixExpression:
-    PostfixExpression | 
-    {PrefixExpression} operator=('!'|'-') expr=PrefixExpression
+    PostfixExpression
+    | ({PrefixExpression} operator=('!'|'-') expr=PrefixExpression)
 ;
 
 PostfixExpression returns PostfixExpression:
