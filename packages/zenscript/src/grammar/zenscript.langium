@@ -105,11 +105,11 @@ ContinueStatement returns ContinueStatement:
 // So we have these syntaxes.
 
 ExpressionNoMap returns Expression:
-    AssignmentNoMap
+    AssignmentExpressionNoMap
 ;
 
-AssignmentNoMap returns Assignment:
-    ConditionalExpressionNoMap ({Assignment.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^=') right=Assignment)?
+AssignmentExpressionNoMap returns AssignmentExpression:
+    ConditionalExpressionNoMap ({AssignmentExpression.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^=') right=AssignmentExpression)?
 ;
 
 ConditionalExpressionNoMap returns ConditionalExpression:
@@ -182,11 +182,11 @@ fragment LiteralExpressionNoMap returns LiteralExpression:
 
 //region Expression
 Expression returns Expression:
-    Assignment
+    AssignmentExpression
 ;
 
-Assignment returns Assignment:
-    ConditionalExpression ({Assignment.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^=') right=Assignment)?
+AssignmentExpression returns AssignmentExpression:
+    ConditionalExpression ({AssignmentExpression.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^=') right=AssignmentExpression)?
 ;
 
 ConditionalExpression returns ConditionalExpression:

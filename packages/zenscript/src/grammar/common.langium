@@ -162,7 +162,7 @@ interface VariableDeclaration {
 //endregion Statement
 
 //region Expression
-type Expression = Assignment
+type Expression = AssignmentExpression
     | ConditionalExpression
     | InfixExpression
     | PrefixExpression
@@ -171,7 +171,7 @@ type Expression = Assignment
     | UnquotedString
     | DefaultExpression
 
-interface Assignment {
+interface AssignmentExpression {
     left: Expression
     operator: '=' | '+=' | '-=' | '~=' | '*=' | '/=' | '%=' | '|=' | '&=' | '^='
     right: Expression
