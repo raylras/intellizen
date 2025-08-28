@@ -1,4 +1,4 @@
-import type { ExpressionStatement, FieldDeclaration, FunctionDeclaration, MemberAccess } from '../../../src/generated/ast'
+import type { AccessExpression, ExpressionStatement, FieldDeclaration, FunctionDeclaration } from '../../../src/generated/ast'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { assertNoErrors, createTestServicesWithWorkspace, getDocument } from '../../utils'
@@ -19,19 +19,19 @@ describe('check qualified name reference', async () => {
   })
 
   it('check toplevel function', () => {
-    const expr_createLogHelper = statement_utils_LogUtils_createLogHelper.expr as MemberAccess
+    const expr_createLogHelper = statement_utils_LogUtils_createLogHelper.expr as AccessExpression
     const ref_createLogHelper = expr_createLogHelper.entity.ref as FunctionDeclaration
     expect(ref_createLogHelper.name).toBe('createLogHelper')
   })
 
   it('check zenClass static field', () => {
-    const expr_default = statement_utils_LogUtils_LogHelper_default.expr as MemberAccess
+    const expr_default = statement_utils_LogUtils_LogHelper_default.expr as AccessExpression
     const ref_default = expr_default.entity.ref as FieldDeclaration
     expect(ref_default.name).toBe('default')
   })
 
   it('check zenClass static function', () => {
-    const expr_create = statement_utils_LogUtils_LogHelper_create.expr as MemberAccess
+    const expr_create = statement_utils_LogUtils_LogHelper_create.expr as AccessExpression
     const ref_create = expr_create.entity.ref as FieldDeclaration
     expect(ref_create.name).toBe('create')
   })

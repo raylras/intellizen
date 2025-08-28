@@ -1,4 +1,4 @@
-import type { CallExpression, ExpressionStatement, MemberAccess, ReferenceExpression } from '../../../src/generated/ast'
+import type { AccessExpression, CallExpression, ExpressionStatement, ReferenceExpression } from '../../../src/generated/ast'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { assertNoErrors, createTestServicesWithWorkspace, getDocument } from '../../utils'
@@ -24,7 +24,7 @@ describe('function importing', async () => {
     const plus = next().receiver as ReferenceExpression
     expect(plus.entity.ref).toBeDefined()
 
-    const scripts_lib_add = next().receiver as MemberAccess
+    const scripts_lib_add = next().receiver as AccessExpression
     expect(scripts_lib_add.entity.ref).toBeDefined()
   })
 
@@ -36,7 +36,7 @@ describe('function importing', async () => {
     const minus = next().receiver as ReferenceExpression
     expect(minus.entity.ref).toBeUndefined()
 
-    const scripts_lib_sub = next().receiver as MemberAccess
+    const scripts_lib_sub = next().receiver as AccessExpression
     expect(scripts_lib_sub.entity.ref).toBeUndefined()
   })
 })

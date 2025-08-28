@@ -145,7 +145,7 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
       }
     },
 
-    MemberAccess: (element, acceptor) => {
+    AccessExpression: (element, acceptor) => {
       const entity = element.entity?.ref
       const { type, modifier } = this.semanticReferenceRules(entity?.$type)?.call(this, entity) ?? {}
       if (type) {

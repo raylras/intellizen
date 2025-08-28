@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium'
-import type { Expression, ExpressionStatement, MemberAccess } from '../../../src/generated/ast'
+import type { AccessExpression, Expression, ExpressionStatement } from '../../../src/generated/ast'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { isConstructorDeclaration, isFunctionDeclaration } from '../../../src/generated/ast'
@@ -18,7 +18,7 @@ describe(`static accessing`, async () => {
 
   it('accessing top-level static variable RED', () => {
     const statement_red = script.statements[0] as ExpressionStatement
-    const expression_red = statement_red.expr as MemberAccess
+    const expression_red = statement_red.expr as AccessExpression
     const members_red = getMembers(expression_red)
     expect(members_red.length, 'should have exactly 1 member').toBe(1)
     expect(members_red[0], 'should be a constructor').satisfies(isConstructorDeclaration)
@@ -26,7 +26,7 @@ describe(`static accessing`, async () => {
 
   it('accessing top-level static variable GREEN', () => {
     const statement = script.statements[1] as ExpressionStatement
-    const expression = statement.expr as MemberAccess
+    const expression = statement.expr as AccessExpression
     const members = getMembers(expression)
     expect(members.length, 'should have exactly 1 member').toBe(1)
     expect(members[0], 'should be a constructor').satisfies(isConstructorDeclaration)
@@ -34,7 +34,7 @@ describe(`static accessing`, async () => {
 
   it('accessing class Color', () => {
     const statement_color = script.statements[2] as ExpressionStatement
-    const expression_color = statement_color.expr as MemberAccess
+    const expression_color = statement_color.expr as AccessExpression
     const members_color = getMembers(expression_color)
     expect(members_color.length, 'should have exactly 1 member').toBe(1)
     expect(members_color[0], 'should be a function').satisfies(isFunctionDeclaration)
@@ -43,7 +43,7 @@ describe(`static accessing`, async () => {
 
   it('accessing class static function randomColor', () => {
     const statement_random_color = script.statements[3] as ExpressionStatement
-    const expression_random_color = statement_random_color.expr as MemberAccess
+    const expression_random_color = statement_random_color.expr as AccessExpression
     const members_random_color = getMembers(expression_random_color)
     expect(members_random_color.length, 'should have exactly 1 member').toBe(1)
     expect(members_random_color[0], 'should be a constructor').satisfies(isConstructorDeclaration)
@@ -51,7 +51,7 @@ describe(`static accessing`, async () => {
 
   it('accessing top-level static variable NOTHING', () => {
     const statement_nothing = script.statements[4] as ExpressionStatement
-    const expression_nothing = statement_nothing.expr as MemberAccess
+    const expression_nothing = statement_nothing.expr as AccessExpression
     const members_nothing = getMembers(expression_nothing)
     expect(members_nothing.length, 'should have no members').toBe(0)
   })

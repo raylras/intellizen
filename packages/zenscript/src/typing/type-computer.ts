@@ -1,5 +1,4 @@
 import type { AstNode } from 'langium'
-import type { ClassDeclaration, ZenScriptAstType } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
 import type { MemberProvider } from '../reference/member-provider'
 import type { ZenScriptSyntheticAstType } from '../reference/synthetic'
@@ -7,7 +6,7 @@ import type { BracketManager } from '../workspace/bracket-manager'
 import type { PackageManager } from '../workspace/package-manager'
 import type { BuiltinTypes, Type, TypeParameterSubstitutions } from './type-description'
 import { AstUtils, stream } from 'langium'
-import { isAssignment, isCallExpression, isClassDeclaration, isConstructorDeclaration, isExpression, isFunctionDeclaration, isFunctionExpression, isIndexExpression, isMemberAccess, isOperatorFunctionDeclaration, isReferenceExpression, isTypeParameter, isVariableDeclaration } from '../generated/ast'
+import * as ast from '../generated/ast'
 import { defineRules } from '../utils/rule'
 import { ClassType, CompoundType, FunctionType, IntersectionType, isAnyType, isClassType, isFunctionType, TypeVariable } from './type-description'
 
@@ -15,7 +14,7 @@ export interface TypeComputer {
   inferType: (node: AstNode | undefined) => Type | undefined
 }
 
-type RuleSpec = ZenScriptAstType & ZenScriptSyntheticAstType
+type RuleSpec = ast.ZenScriptAstType & ZenScriptSyntheticAstType
 type RuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => Type | undefined }
 
 export class ZenScriptTypeComputer implements TypeComputer {
@@ -41,8 +40,8 @@ export class ZenScriptTypeComputer implements TypeComputer {
     return new ClassType(classDecl, substitutions)
   }
 
-  private classDeclOf(className: BuiltinTypes | string): ClassDeclaration | undefined {
-    return stream(this.packageManager().find(className)).find(isClassDeclaration)
+  private classDeclOf(className: BuiltinTypes | string): ast.ClassDeclaration | undefined {
+    return stream(this.packageManager().find(className)).find(ast.isClassDeclaration)
   }
 
   private readonly inferRules = defineRules<RuleMap>({
@@ -85,12 +84,12 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     NamedType: (element) => {
-      const ref = element.path.at(-1)?.ref
-      if (isTypeParameter(ref)) {
-        return new TypeVariable(ref)
+      const last = element.path.at(-1)?.ref
+      if (ast.isTypeParameter(last)) {
+        return new TypeVariable(last)
       }
-      else if (isClassDeclaration(ref)) {
-        return new ClassType(ref, new Map())
+      else if (ast.isClassDeclaration(last)) {
+        return new ClassType(last, new Map())
       }
     },
 
@@ -136,7 +135,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
       }
 
       const operator = this.memberProvider()
-        .streamMembers(rangeType).filter(isOperatorFunctionDeclaration)
+        .streamMembers(rangeType).filter(ast.isOperatorFunctionDeclaration)
         .filter(it => it.operator === 'for')
         .filter(it => it.params.length === length)
         .head()
@@ -153,22 +152,22 @@ export class ZenScriptTypeComputer implements TypeComputer {
         return this.inferType(element.type)
       }
 
-      if (element.defaultValue && isExpression(element.defaultValue)) {
+      if (element.defaultValue && ast.isExpression(element.defaultValue)) {
         return this.inferType(element.defaultValue)
       }
 
-      if (isFunctionExpression(element.$container)) {
+      if (ast.isFunctionExpression(element.$container)) {
         const funcExpr = element.$container
         const index = element.$containerIndex!
 
         let expected: Type | undefined
-        if (isAssignment(funcExpr.$container) && funcExpr.$container.operator === '=') {
+        if (ast.isAssignmentExpression(funcExpr.$container) && funcExpr.$container.operator === '=') {
           expected = this.inferType(funcExpr.$container.left)
         }
-        else if (isVariableDeclaration(funcExpr.$container)) {
+        else if (ast.isVariableDeclaration(funcExpr.$container)) {
           expected = this.inferType(funcExpr.$container.type)
         }
-        else if (isCallExpression(funcExpr.$container)) {
+        else if (ast.isCallExpression(funcExpr.$container)) {
           const callArgIndex = funcExpr.$containerIndex!
           const receiverType = this.inferType(funcExpr.$container.receiver)
           expected = isFunctionType(receiverType) ? receiverType.paramTypes.at(callArgIndex) : receiverType
@@ -183,7 +182,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
         else if (isClassType(expected)) {
           const lambdaDecl = this.memberProvider()
             .streamMembers(expected)
-            .filter(isFunctionDeclaration)
+            .filter(ast.isFunctionDeclaration)
             .filter(it => it.variance === 'lambda')
             .head()
           return this.inferType(lambdaDecl?.params.at(index))
@@ -191,7 +190,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
       }
     },
 
-    Assignment: (element) => {
+    AssignmentExpression: (element) => {
       switch (element.operator) {
         case '&=':
         case '|=':
@@ -205,7 +204,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
           const leftType = this.inferType(element.left)
           const operator = this.memberProvider()
             .streamMembers(leftType)
-            .filter(isOperatorFunctionDeclaration)
+            .filter(ast.isOperatorFunctionDeclaration)
             .filter(it => it.operator === element.operator)
             .filter(it => it.params.length === 1)
             .head()
@@ -217,10 +216,10 @@ export class ZenScriptTypeComputer implements TypeComputer {
         }
 
         case '=': {
-          if (isIndexExpression(element.left)) {
+          if (ast.isIndexExpression(element.left)) {
             const operator = this.memberProvider()
               .streamMembers(element.left)
-              .filter(isOperatorFunctionDeclaration)
+              .filter(ast.isOperatorFunctionDeclaration)
               .filter(it => it.operator === '[]=')
               .filter(it => it.params.length === 2)
               .head()
@@ -244,7 +243,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
         case '!': {
           const operator = this.memberProvider()
             .streamMembers(exprType)
-            .filter(isOperatorFunctionDeclaration)
+            .filter(ast.isOperatorFunctionDeclaration)
             .filter(it => it.operator === element.operator)
             .filter(it => it.params.length === 0)
             .head()
@@ -272,7 +271,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
         case '!=': {
           const operator = this.memberProvider()
             .streamMembers(leftType)
-            .filter(isOperatorFunctionDeclaration)
+            .filter(ast.isOperatorFunctionDeclaration)
             .filter(it => it.operator === element.operator)
             .filter(it => it.params.length === 1)
             .head()
@@ -282,7 +281,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
         case 'in': {
           const operator = this.memberProvider()
             .streamMembers(leftType)
-            .filter(isOperatorFunctionDeclaration)
+            .filter(ast.isOperatorFunctionDeclaration)
             .filter(it => it.operator === 'has')
             .filter(it => it.params.length === 1)
             .head()
@@ -302,7 +301,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
       const leftType = this.inferType(element.from)
       const operator = this.memberProvider()
         .streamMembers(leftType)
-        .filter(isOperatorFunctionDeclaration)
+        .filter(ast.isOperatorFunctionDeclaration)
         .filter(it => it.operator === '..')
         .filter(it => it.params.length === 1)
         .head()
@@ -346,19 +345,19 @@ export class ZenScriptTypeComputer implements TypeComputer {
 
     ReferenceExpression: (element) => {
       // dynamic this
-      if (element.entity.$refText === 'this' && isClassDeclaration(element.entity.ref)) {
+      if (element.entity.$refText === 'this' && ast.isClassDeclaration(element.entity.ref)) {
         return new ClassType(element.entity.ref, new Map())
       }
 
       // dynamic arguments
-      if (isCallExpression(element.$container) && element.$containerProperty === 'arguments' && isFunctionDeclaration(element.entity.ref)) {
+      if (ast.isCallExpression(element.$container) && element.$containerProperty === 'arguments' && ast.isFunctionDeclaration(element.entity.ref)) {
         return this.inferType(element.entity.ref.retType)
       }
 
       return this.inferType(element.entity.ref) ?? this.classTypeOf('any')
     },
 
-    MemberAccess: (element) => {
+    AccessExpression: (element) => {
       const receiverType = this.inferType(element.receiver)
 
       // Recursive Guard
@@ -368,7 +367,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
       }
 
       const targetContainer = element.entity.ref?.$container
-      if (isOperatorFunctionDeclaration(targetContainer) && targetContainer.operator === '.') {
+      if (ast.isOperatorFunctionDeclaration(targetContainer) && targetContainer.operator === '.') {
         let dynamicTargetType = this.inferType(targetContainer.retType)
         if (dynamicTargetType && isClassType(receiverType)) {
           dynamicTargetType = dynamicTargetType.substituteTypeParameters(receiverType.substitutions)
@@ -391,7 +390,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
 
       const operator = this.memberProvider()
         .streamMembers(element.receiver)
-        .filter(isOperatorFunctionDeclaration)
+        .filter(ast.isOperatorFunctionDeclaration)
         .filter(it => it.operator === '[]')
         .filter(it => it.params.length === 1)
         .head()
@@ -403,13 +402,13 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     CallExpression: (element) => {
-      if (isReferenceExpression(element.receiver) || isMemberAccess(element.receiver)) {
+      if (ast.isReferenceExpression(element.receiver) || ast.isAccessExpression(element.receiver)) {
         const receiver = element.receiver.entity.ref
         if (!receiver) {
           return
         }
-        if (isConstructorDeclaration(receiver)) {
-          const classDecl = AstUtils.getContainerOfType(receiver, isClassDeclaration)
+        if (ast.isConstructorDeclaration(receiver)) {
+          const classDecl = AstUtils.getContainerOfType(receiver, ast.isClassDeclaration)
           if (!classDecl) {
             return
           }

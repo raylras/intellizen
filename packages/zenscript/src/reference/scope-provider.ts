@@ -105,7 +105,7 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
       return scope
     },
 
-    MemberAccess: ({ container }) => {
+    AccessExpression: ({ container }) => {
       const members = this.memberProvider.streamMembers(container.receiver)
       const outer = this.createDynamicScope(container)
       return this.createScopeForNodes(members, outer)
@@ -171,7 +171,7 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
         }
       }.bind(this)), outer)
     }
-    else if (ast.isMemberAccess(node)) {
+    else if (ast.isAccessExpression(node)) {
       return new StreamScope(toStream(function* (this: ZenScriptScopeProvider) {
         // dynamic members
         const receiverType = this.typeComputer.inferType(node.receiver)

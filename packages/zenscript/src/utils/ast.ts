@@ -1,12 +1,12 @@
 import type { AstNode, AstNodeDescription, Stream, URI } from 'langium'
 import type { BracketExpression, ClassDeclaration, ImportDeclaration } from '../generated/ast'
 import { AstUtils, isAstNodeDescription } from 'langium'
-import { isBracketExpression, isClassDeclaration, isClassMemberDeclaration, isFunctionDeclaration, isImportDeclaration, isScript } from '../generated/ast'
+import * as ast from '../generated/ast'
 import { isZs } from './document'
 import { toStream } from './stream'
 
 export function isToplevel(node: AstNode | undefined): boolean {
-  return isScript(node?.$container)
+  return ast.isScript(node?.$container)
 }
 
 export function isStatic(node: AstNode | undefined) {
@@ -26,9 +26,9 @@ export function isReadonly(node: AstNode | undefined) {
 }
 
 export function isExposed(node: AstNode | undefined) {
-  return (isScript(node) && isZs(AstUtils.getDocument(node)))
-    || (isToplevel(node) && (isStatic(node) || isClassDeclaration(node) || isFunctionDeclaration(node)))
-    || (isClassMemberDeclaration(node) && isStatic(node))
+  return (ast.isScript(node) && isZs(AstUtils.getDocument(node)))
+    || (isToplevel(node) && (isStatic(node) || ast.isClassDeclaration(node) || ast.isFunctionDeclaration(node)))
+    || (ast.isClassMemberDeclaration(node) && isStatic(node))
 }
 
 export function getDocumentUri(node: AstNode | undefined): URI | undefined {
@@ -44,14 +44,14 @@ export function getDocumentUri(node: AstNode | undefined): URI | undefined {
 export function getPathAsString(importDecl: ImportDeclaration, index?: number): string
 export function getPathAsString(bracket: BracketExpression, index?: number): string
 export function getPathAsString(astNode: ImportDeclaration | BracketExpression, index?: number): string {
-  if (isImportDeclaration(astNode)) {
+  if (ast.isImportDeclaration(astNode)) {
     let names = astNode.path.map(it => it.$refText)
     if (index !== undefined) {
       names = names.slice(0, index + 1)
     }
     return names.join('.')
   }
-  else if (isBracketExpression(astNode)) {
+  else if (ast.isBracketExpression(astNode)) {
     let names = astNode.path.map(it => it.$cstNode!.text)
     if (index !== undefined) {
       names = names.slice(0, index + 1)
@@ -81,11 +81,12 @@ export function streamClassChain(classDecl: ClassDeclaration): Stream<ClassDecla
       visited.add(head)
       head.superTypes
         .map(it => it.path.at(-1)?.ref)
-        .filter(isClassDeclaration)
+        .filter(ast.isClassDeclaration)
         .forEach(it => deque.push(it))
     }
   })
 }
+
 /**
  * Binary search for the maximum lower bound of the specified target value.
  *

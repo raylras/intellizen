@@ -1,6 +1,6 @@
-import type { MemberAccess } from '../../src/generated/ast'
+import type { AccessExpression } from '../../src/generated/ast'
 import { describe, expect, it } from 'vitest'
-import { ArrayLiteral, Assignment, BooleanLiteral, CallExpression, ConditionalExpression, Expression, FloatLiteral, FunctionExpression, IndexExpression, InfixExpression, InstanceofExpression, IntegerLiteral, IntRangeExpression, MapLiteral, NullLiteral, ParenthesizedExpression, PrefixExpression, ReferenceExpression, StringLiteral, StringTemplate, TypeCastExpression, UnquotedString } from '../../src/generated/ast'
+import { ArrayLiteral, AssignmentExpression, BooleanLiteral, CallExpression, ConditionalExpression, Expression, FloatLiteral, FunctionExpression, IndexExpression, InfixExpression, InstanceofExpression, IntegerLiteral, IntRangeExpression, MapLiteral, NullLiteral, ParenthesizedExpression, PrefixExpression, ReferenceExpression, StringLiteral, StringTemplate, TypeCastExpression, UnquotedString } from '../../src/generated/ast'
 import { assertClassTypeReference, assertReferenceExpressionText, createTestParser } from '../utils'
 
 const parse = createTestParser()
@@ -192,7 +192,7 @@ describe('parse expression of script with ZenScript ', () => {
 
   // class "any" is not defined.
   it.skip('member access expression', async () => {
-    const memberAccessExpr = (await parse('foo.bar', { rule: Expression.$type })).parseResult.value as MemberAccess
+    const memberAccessExpr = (await parse('foo.bar', { rule: Expression.$type })).parseResult.value as AccessExpression
     expect(memberAccessExpr.entity.$refText).toBe('bar')
     assertReferenceExpressionText(memberAccessExpr.receiver, 'foo')
   })
@@ -259,8 +259,8 @@ describe('parse expression of script with ZenScript ', () => {
   })
 
   it('operator priority', async () => {
-    const assignment = (await parse('!true ? foo || bar : foo += 2', { rule: 'Expression' })).parseResult.value as Assignment
-    expect(assignment.$type).toBe(Assignment.$type)
+    const assignment = (await parse('!true ? foo || bar : foo += 2', { rule: 'Expression' })).parseResult.value as AssignmentExpression
+    expect(assignment.$type).toBe(AssignmentExpression.$type)
     expect(assignment.operator).toBe('+=')
     expect(assignment.right.$type).toBe(IntegerLiteral.$type)
 

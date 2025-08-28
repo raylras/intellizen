@@ -1,4 +1,4 @@
-import type { ExpressionStatement, MemberAccess } from '../../../src/generated/ast'
+import type { AccessExpression, ExpressionStatement } from '../../../src/generated/ast'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { assertNoErrors, createTestServicesWithWorkspace, getDocument } from '../../utils'
@@ -9,7 +9,7 @@ describe(`check dynamic member`, async () => {
   const document_member_zs = await getDocument(services, path.resolve(__dirname, 'scripts', 'member.zs'))
   const script_member_zs = document_member_zs.parseResult.value
   const statement_justAny_foo_bar = script_member_zs.statements[1] as ExpressionStatement
-  const expression_justAny_foo_bar = statement_justAny_foo_bar.expr as MemberAccess
+  const expression_justAny_foo_bar = statement_justAny_foo_bar.expr as AccessExpression
 
   it('should no errors', () => {
     assertNoErrors(document_member_zs)

@@ -1,4 +1,4 @@
-import type { Assignment, CallExpression, ExpressionStatement, FunctionExpression, VariableDeclaration } from '../../../src/generated/ast'
+import type { AssignmentExpression, CallExpression, ExpressionStatement, FunctionExpression, VariableDeclaration } from '../../../src/generated/ast'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { assertNoErrors, createTestServicesWithWorkspace, getDocument } from '../../utils'
@@ -27,7 +27,7 @@ describe('check inferring class lambda declaration', async () => {
   })
 
   it('check inferring Assignment', () => {
-    const functionExpression = (statement_assignment.expr as Assignment).right as FunctionExpression
+    const functionExpression = (statement_assignment.expr as AssignmentExpression).right as FunctionExpression
     const u = functionExpression.params[0]
     const v = functionExpression.params[1]
     const type_u = services.typing.TypeComputer.inferType(u)
@@ -66,7 +66,7 @@ describe('check inferring function type', async () => {
   })
 
   it('check inferring Assignment', () => {
-    const functionExpression = (statement_assignment.expr as Assignment).right as FunctionExpression
+    const functionExpression = (statement_assignment.expr as AssignmentExpression).right as FunctionExpression
     const w = functionExpression.params[0]
     const type_w = services.typing.TypeComputer.inferType(w)
     expect(type_w?.toString()).toBe('int')

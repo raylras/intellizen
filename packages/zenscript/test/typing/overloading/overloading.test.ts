@@ -1,5 +1,5 @@
 import type { AstNode } from 'langium'
-import type { MemberAccess, ReferenceExpression, Statement } from '../../../src/generated/ast'
+import type { AccessExpression, ReferenceExpression, Statement } from '../../../src/generated/ast'
 import path from 'node:path'
 import { AstUtils } from 'langium'
 import { assert, describe, expect, it, suite } from 'vitest'
@@ -11,8 +11,8 @@ const services = await createTestServicesWithWorkspace(__dirname)
 function findOverloadForCall(call: Statement): AstNode {
   const callExpr = AstUtils.streamAst(call).find(isCallExpression)
   expect(callExpr).toBeDefined()
-  expect(callExpr?.receiver?.$type).toMatch(/ReferenceExpression|MemberAccess/)
-  const receiver = callExpr!.receiver as ReferenceExpression | MemberAccess
+  expect(callExpr?.receiver?.$type).toMatch(/ReferenceExpression|AccessExpression/)
+  const receiver = callExpr!.receiver as ReferenceExpression | AccessExpression
   const target = receiver.entity.ref
   expect(target).toBeDefined()
   return target!
