@@ -243,12 +243,12 @@ export class ZenScriptCompletionProvider extends DefaultCompletionProvider {
       }
 
       const params = element.params.map((param, index) => {
-        return `${param.name}: ${funcType.paramTypes[index].toString()}`
+        return `${param.name}: ${funcType.params[index].toString()}`
       }).join(', ')
 
       return {
         detail: `(${params})`,
-        description: funcType.returnType.toString(),
+        description: funcType.ret.toString(),
       }
     },
 

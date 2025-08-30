@@ -1,5 +1,4 @@
 import type { ClassDeclaration, Declaration, TypeParameter } from '../generated/ast'
-import { stream } from 'langium'
 
 // region TypeDescription
 export interface ZenScriptType {
@@ -13,51 +12,57 @@ export interface ZenScriptType {
 
 export type BuiltinTypes = 'any' | 'bool' | 'byte' | 'short' | 'int' | 'long' | 'float' | 'double' | 'string' | 'void' | 'Array' | 'List' | 'Map' | 'Entry' | 'stanhebben.zenscript.value.IntRange'
 
-export type TypeParameterSubstitutions = Map<TypeParameter, Type>
+export type Subst = Map<TypeParameter, Type>
 
-export abstract class Type {
+export function makeSubst(...entries: [TypeParameter, Type][]): Subst {
+  return new Map(entries)
+}
+
+export interface Type {
   $type: string
-
-  protected constructor($type: keyof ZenScriptType) {
-    this.$type = $type
-  }
-
-  abstract substituteTypeParameters(substitutions: TypeParameterSubstitutions): Type
-  abstract toString(): string
+  applySubst: (subst: Subst) => Type
+  toString: () => string
 }
 
-export abstract class NamedType<D extends Declaration> extends Type {
-  declaration: D
-
-  protected constructor($type: keyof ZenScriptType, declaration: D) {
-    super($type)
-    this.declaration = declaration
-  }
+export interface NamedType<D extends Declaration> extends Type {
+  decl?: D
 }
 
-export class ClassType extends NamedType<ClassDeclaration> {
-  substitutions: TypeParameterSubstitutions
-  constructor(declaration: ClassDeclaration, substitutions: TypeParameterSubstitutions) {
-    super('ClassType', declaration)
-    this.substitutions = substitutions
+export class ClassType implements NamedType<ClassDeclaration> {
+  $type = 'ClassType'
+  name: string
+  decl?: ClassDeclaration
+  subst?: Subst
+  constructor(name: string, decl?: ClassDeclaration, subst?: Subst) {
+    this.name = name
+    this.decl = decl
+    this.subst = subst
   }
 
-  override substituteTypeParameters(substitutions: TypeParameterSubstitutions) {
-    if (!this.substitutions.size) {
-      return new ClassType(this.declaration, substitutions)
+  applySubst(subst: Subst): Type {
+    const newSubst = new Map(this.subst?.entries().map(([p, t]) => [p, t.applySubst(subst)])) ?? undefined
+    return new ClassType(this.name, this.decl, newSubst)
+  }
+
+  updateSubst(param: () => TypeParameter | undefined, type: () => Type | undefined) {
+    if (!this.subst) {
+      this.subst = makeSubst()
     }
-    else {
-      const newSubstitutions = new Map(stream(this.substitutions).map(([key, value]) => [key, value.substituteTypeParameters(substitutions)]))
-      return new ClassType(this.declaration, newSubstitutions)
+    const p = param()
+    if (p) {
+      const t = type()
+      if (t) {
+        this.subst.set(p, t)
+      }
     }
   }
 
-  override toString(): string {
-    let result = this.declaration.name
-    if (this.declaration.typeParams.length) {
+  toString(): string {
+    let result = this.name
+    if (this.decl?.typeParams.length) {
       result += '<'
-      result += this.declaration.typeParams
-        .map(it => this.substitutions.get(it)?.toString() ?? it.name)
+      result += this.decl.typeParams
+        .map(it => this.subst?.get(it)?.toString() ?? it.name)
         .join(', ')
       result += '>'
     }
@@ -65,90 +70,92 @@ export class ClassType extends NamedType<ClassDeclaration> {
   }
 }
 
-export class TypeVariable extends NamedType<TypeParameter> {
-  constructor(declaration: TypeParameter) {
-    super('TypeVariable', declaration)
+export class TypeVariable implements NamedType<TypeParameter> {
+  $type = 'TypeVariable'
+  decl: TypeParameter
+  constructor(decl: TypeParameter) {
+    this.decl = decl
   }
 
-  override substituteTypeParameters(substitutions: TypeParameterSubstitutions): Type {
-    return substitutions.get(this.declaration) ?? this
+  applySubst(subst: Subst): Type {
+    return subst.get(this.decl) ?? this
   }
 
-  override toString(): string {
-    return this.declaration.name
+  toString(): string {
+    return this.decl.name
   }
 }
 
-export class FunctionType extends Type {
-  paramTypes: Type[]
-  returnType: Type
-  constructor(paramTypes: Type[], returnType: Type) {
-    super('FunctionType')
-    this.paramTypes = paramTypes
-    this.returnType = returnType
+export class FunctionType implements Type {
+  $type = 'FunctionType'
+  params: Type[]
+  ret: Type
+  constructor(params: Type[], ret: Type) {
+    this.params = params
+    this.ret = ret
   }
 
-  override substituteTypeParameters(substitutions: TypeParameterSubstitutions) {
-    const paramTypes = this.paramTypes.map(it => it.substituteTypeParameters(substitutions))
-    const returnType = this.returnType.substituteTypeParameters(substitutions)
-    return new FunctionType(paramTypes, returnType)
+  applySubst(subst: Subst) {
+    const newParams = this.params.map(it => it.applySubst(subst))
+    const newRet = this.ret.applySubst(subst)
+    return new FunctionType(newParams, newRet)
   }
 
-  override toString(): string {
+  toString(): string {
     let result = 'function('
-    if (this.paramTypes.length) {
-      result += this.paramTypes.map(it => it.toString()).join(',')
+    if (this.params.length) {
+      result += this.params.map(it => it.toString()).join(',')
     }
     result += ')'
-    result += this.returnType.toString()
+    result += this.ret.toString()
     return result
   }
 }
 
-export class UnionType extends Type {
+export class UnionType implements Type {
+  $type = 'UnionType'
   types: Type[]
   constructor(types: Type[]) {
-    super('UnionType')
     this.types = types
   }
 
-  override substituteTypeParameters(substitutions: TypeParameterSubstitutions) {
-    return new UnionType(this.types.map(it => it.substituteTypeParameters(substitutions)))
+  applySubst(subst: Subst) {
+    return new UnionType(this.types.map(it => it.applySubst(subst)))
   }
 
-  override toString(): string {
+  toString(): string {
     return this.types.map(it => it.toString()).join(' | ')
   }
 }
 
-export class IntersectionType extends Type {
+export class IntersectionType implements Type {
+  $type = 'IntersectionType'
   types: Type[]
   constructor(types: Type[]) {
-    super('IntersectionType')
     this.types = types
   }
 
-  substituteTypeParameters(substitutions: TypeParameterSubstitutions) {
-    return new IntersectionType(this.types.map(it => it.substituteTypeParameters(substitutions)))
+  applySubst(subst: Subst) {
+    return new IntersectionType(this.types.map(it => it.applySubst(subst)))
   }
 
-  override toString(): string {
+  toString(): string {
     return this.types.map(it => it.toString()).join(' & ')
   }
 }
 
-export class CompoundType extends Type {
+export class CompoundType implements Type {
+  $type = 'CompoundType'
   types: Type[]
   constructor(types: Type[]) {
-    super('CompoundType')
     this.types = types
   }
 
-  substituteTypeParameters(substitutions: TypeParameterSubstitutions) {
-    return new CompoundType(this.types.map(it => it.substituteTypeParameters(substitutions)))
+  applySubst(subst: Subst) {
+    return new CompoundType(this.types.map(it => it.applySubst(subst)))
   }
 
-  override toString(): string {
+  toString(): string {
     return this.types.map(it => it.toString()).join(', ')
   }
 }
@@ -160,55 +167,55 @@ export function isClassType(type: unknown): type is ClassType {
 }
 
 export function isStringType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'string'
+  return isClassType(type) && type.name === 'string'
 }
 
 export function isAnyType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'any'
+  return isClassType(type) && type.name === 'any'
 }
 
 export function isBoolType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'bool'
+  return isClassType(type) && type.name === 'bool'
 }
 
 export function isByteType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'byte'
+  return isClassType(type) && type.name === 'byte'
 }
 
 export function isShortType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'short'
+  return isClassType(type) && type.name === 'short'
 }
 
 export function isIntType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'int'
+  return isClassType(type) && type.name === 'int'
 }
 
 export function isLongType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'long'
+  return isClassType(type) && type.name === 'long'
 }
 
 export function isFloatType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'float'
+  return isClassType(type) && type.name === 'float'
 }
 
 export function isDoubleType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'double'
+  return isClassType(type) && type.name === 'double'
 }
 
 export function isVoidType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'void'
+  return isClassType(type) && type.name === 'void'
 }
 
 export function isArrayType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'Array'
+  return isClassType(type) && type.name === 'Array'
 }
 
 export function isListType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'List'
+  return isClassType(type) && type.name === 'List'
 }
 
 export function isMapType(type: unknown): type is ClassType {
-  return isClassType(type) && type.declaration.name === 'Map'
+  return isClassType(type) && type.name === 'Map'
 }
 
 export function isFunctionType(type: unknown): type is FunctionType {

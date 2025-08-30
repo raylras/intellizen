@@ -159,9 +159,9 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
           const index = node.$containerIndex!
           const receiverType = this.typeComputer.inferType(node.$container.receiver)
           if (isFunctionType(receiverType)) {
-            const paramType = receiverType.paramTypes[index]
-            if (isClassType(paramType)) {
-              yield* stream(paramType.declaration.members)
+            const paramType = receiverType.params[index]
+            if (isClassType(paramType) && paramType.decl) {
+              yield* stream(paramType.decl.members)
                 .filter(ast.isFunctionDeclaration)
                 .filter(isStatic)
                 .filter(it => it.params.length === 0)
@@ -175,8 +175,8 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
       return new StreamScope(toStream(function* (this: ZenScriptScopeProvider) {
         // dynamic members
         const receiverType = this.typeComputer.inferType(node.receiver)
-        if (isClassType(receiverType)) {
-          const operatorDecl = stream(receiverType.declaration.members)
+        if (isClassType(receiverType) && receiverType.decl) {
+          const operatorDecl = stream(receiverType.decl.members)
             .filter(ast.isOperatorFunctionDeclaration)
             .filter(it => it.operator === '.')
             .filter(it => it.params.length === 1)

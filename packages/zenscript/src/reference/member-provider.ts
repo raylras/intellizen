@@ -84,11 +84,11 @@ export class ZenScriptMemberProvider implements MemberProvider {
         return this.streamMembers(entity)
       }
 
-      let type = this.typeComputer.inferType(element)
-      if (isClassType(receiverType)) {
-        type = type?.substituteTypeParameters(receiverType.substitutions)
+      let elementType = this.typeComputer.inferType(element)
+      if (elementType && isClassType(receiverType) && receiverType.subst) {
+        elementType = elementType.applySubst(receiverType.subst)
       }
-      return this.streamMembers(type)
+      return this.streamMembers(elementType)
     },
 
     ParenthesizedExpression: (element) => {
@@ -113,7 +113,7 @@ export class ZenScriptMemberProvider implements MemberProvider {
 
     ReferenceExpression: (element) => {
       if (element.entity.$refText === 'this' && ast.isClassDeclaration(element.entity.ref)) {
-        return this.streamMembers(new ClassType(element.entity.ref, new Map()))
+        return this.streamMembers(new ClassType(element.entity.$refText, element.entity.ref))
       }
       return this.streamMembers(element.entity.ref)
     },
@@ -126,18 +126,18 @@ export class ZenScriptMemberProvider implements MemberProvider {
           const owner = AstUtils.getContainerOfType(entity, ast.isClassDeclaration)
           if (!owner)
             return EMPTY_STREAM
-          return this.streamMembers(new ClassType(owner, new Map()))
+          return this.streamMembers(new ClassType(owner.name, owner))
         }
 
         if (ast.isFunctionDeclaration(entity)) {
-          const returnType = this.typeComputer.inferType(entity.retType)
-          return this.streamMembers(returnType)
+          const retType = this.typeComputer.inferType(entity.retType)
+          return this.streamMembers(retType)
         }
       }
 
       const receiverType = this.typeComputer.inferType(element.receiver)
       if (isFunctionType(receiverType)) {
-        return this.streamMembers(receiverType.returnType)
+        return this.streamMembers(receiverType.ret)
       }
       if (isAnyType(receiverType)) {
         return this.streamMembers(receiverType)
@@ -181,7 +181,10 @@ export class ZenScriptMemberProvider implements MemberProvider {
     },
 
     ClassType: (element) => {
-      return streamClassChain(element.declaration)
+      if (!element.decl) {
+        return EMPTY_STREAM
+      }
+      return streamClassChain(element.decl)
         .flatMap(it => it.members)
         .filter(it => !isStatic(it))
     },

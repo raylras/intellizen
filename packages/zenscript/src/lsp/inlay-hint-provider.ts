@@ -76,14 +76,14 @@ export class ZenScriptInlayHintProvider extends AbstractInlayHintProvider {
 
     let location: Location | undefined
     let tooltip: MarkupContent | undefined
-    if (isClassType(type)) {
+    if (isClassType(type) && type.decl) {
       location = {
-        uri: AstUtils.getDocument(type.declaration).uri.toString(),
-        range: this.nameProvider.getNameNode(type.declaration)!.range,
+        uri: AstUtils.getDocument(type.decl).uri.toString(),
+        range: this.nameProvider.getNameNode(type.decl)!.range,
       }
       tooltip = {
         kind: 'markdown',
-        value: `\`\`\`zenscript\n${type.declaration.$cstNode!.text}\n\`\`\``,
+        value: `\`\`\`zenscript\n${type.decl.$cstNode!.text}\n\`\`\``,
       }
     }
 

@@ -82,7 +82,7 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
     for (const { candidate, match } of possibles) {
       const name = 'name' in candidate ? candidate.name : 'Unnamed'
       const funcType = this.typeComputer.inferType(candidate) as FunctionType
-      const paramTypes = funcType.paramTypes.map(it => it.toString()).join(', ')
+      const paramTypes = funcType.params.map(it => it.toString()).join(', ')
       console.warn(`----- ${OverloadMatch[match]} ${name}(${paramTypes})`)
     }
   }
@@ -167,12 +167,12 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
       return
     }
 
-    if (funcType.paramTypes.length !== args.length) {
+    if (funcType.params.length !== args.length) {
       matchSet.add(OverloadMatch.NotMatch)
       return
     }
 
-    funcType.paramTypes.forEach((paramType, index) => {
+    funcType.params.forEach((paramType, index) => {
       const argType = this.typeComputer.inferType(args[index])
       if (!argType) {
         matchSet.add(OverloadMatch.ImplicitCastMatch)
