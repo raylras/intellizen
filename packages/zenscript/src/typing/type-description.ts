@@ -12,15 +12,19 @@ export interface ZenScriptType {
 
 export type BuiltinTypes = 'any' | 'bool' | 'byte' | 'short' | 'int' | 'long' | 'float' | 'double' | 'string' | 'void' | 'Array' | 'List' | 'Map' | 'Entry' | 'stanhebben.zenscript.value.IntRange'
 
-export type Subst = Map<TypeParameter, Type>
+export type Substitution = Map<TypeParameter, Type>
 
-export function makeSubst(...entries: [TypeParameter, Type][]): Subst {
+export function makeSubst(...entries: [TypeParameter, Type][]): Substitution {
   return new Map(entries)
+}
+
+export function applySubstIfPresent(from: Type | undefined, to: Type | undefined): Type | undefined {
+  return isClassType(from) ? to?.applySubst(from.subst) : to
 }
 
 export interface Type {
   $type: string
-  applySubst: (subst: Subst) => Type
+  applySubst: (subst: Substitution | undefined) => Type
   toString: () => string
 }
 
@@ -32,23 +36,26 @@ export class ClassType implements NamedType<ClassDeclaration> {
   $type = 'ClassType'
   name: string
   decl?: ClassDeclaration
-  subst?: Subst
-  constructor(name: string, decl?: ClassDeclaration, subst?: Subst) {
+  subst?: Substitution
+  constructor(name: string, decl?: ClassDeclaration, subst?: Substitution) {
     this.name = name
     this.decl = decl
     this.subst = subst
   }
 
-  applySubst(subst: Subst): Type {
-    const newSubst = new Map(this.subst?.entries().map(([p, t]) => [p, t.applySubst(subst)])) ?? undefined
+  applySubst(subst: Substitution | undefined): Type {
+    if (!subst?.size) {
+      return this
+    }
+    const newSubst = new Map(this.subst?.entries().map(([p, t]) => [p, t.applySubst(subst)]))
     return new ClassType(this.name, this.decl, newSubst)
   }
 
-  updateSubst(param: () => TypeParameter | undefined, type: () => Type | undefined) {
+  addSubst(name: string, type: () => Type | undefined): void {
     if (!this.subst) {
       this.subst = makeSubst()
     }
-    const p = param()
+    const p = this.decl?.typeParams.find(it => it.name === name)
     if (p) {
       const t = type()
       if (t) {
@@ -77,8 +84,8 @@ export class TypeVariable implements NamedType<TypeParameter> {
     this.decl = decl
   }
 
-  applySubst(subst: Subst): Type {
-    return subst.get(this.decl) ?? this
+  applySubst(subst: Substitution | undefined): Type {
+    return subst?.get(this.decl) ?? this
   }
 
   toString(): string {
@@ -95,7 +102,7 @@ export class FunctionType implements Type {
     this.ret = ret
   }
 
-  applySubst(subst: Subst) {
+  applySubst(subst: Substitution | undefined) {
     const newParams = this.params.map(it => it.applySubst(subst))
     const newRet = this.ret.applySubst(subst)
     return new FunctionType(newParams, newRet)
@@ -119,7 +126,7 @@ export class UnionType implements Type {
     this.types = types
   }
 
-  applySubst(subst: Subst) {
+  applySubst(subst: Substitution | undefined) {
     return new UnionType(this.types.map(it => it.applySubst(subst)))
   }
 
@@ -135,7 +142,7 @@ export class IntersectionType implements Type {
     this.types = types
   }
 
-  applySubst(subst: Subst) {
+  applySubst(subst: Substitution | undefined) {
     return new IntersectionType(this.types.map(it => it.applySubst(subst)))
   }
 
@@ -151,7 +158,7 @@ export class CompoundType implements Type {
     this.types = types
   }
 
-  applySubst(subst: Subst) {
+  applySubst(subst: Substitution | undefined) {
     return new CompoundType(this.types.map(it => it.applySubst(subst)))
   }
 

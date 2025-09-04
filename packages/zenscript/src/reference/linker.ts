@@ -13,7 +13,13 @@ export class ZenScriptLinker extends DefaultLinker {
     const scope = this.scopeProvider.getScope(refInfo)
     const description = scope.getElement(refInfo.reference.$refText)
     if (description) {
-      return description
+      const node = description.node
+      if (isImportDeclaration(node) && !node.alias) {
+        return node.path.at(-1)?.$nodeDescription ?? description
+      }
+      else {
+        return description
+      }
     }
 
     if (isImportDeclaration(refInfo.container) && refInfo.container.path.some(it => it.error)) {

@@ -5,7 +5,7 @@ import type { Type, ZenScriptType } from '../typing/type-description'
 import type { ZenScriptSyntheticAstType } from './synthetic'
 import { AstUtils, EMPTY_STREAM, stream } from 'langium'
 import * as ast from '../generated/ast'
-import { ClassType, isAnyType, isClassType, isFunctionType } from '../typing/type-description'
+import { applySubstIfPresent, ClassType, isAnyType, isFunctionType } from '../typing/type-description'
 import { isStatic, streamClassChain } from '../utils/ast'
 import { isNamespaceNode } from '../utils/namespace-tree'
 import { defineRules } from '../utils/rule'
@@ -16,7 +16,7 @@ export interface MemberProvider {
 }
 
 type RuleSpec = ast.ZenScriptAstType & ZenScriptType & ZenScriptSyntheticAstType
-type RuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => Stream<AstNode> }
+type RuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => Stream<AstNode> | undefined }
 
 export class ZenScriptMemberProvider implements MemberProvider {
   private readonly typeComputer: TypeComputer
@@ -30,11 +30,10 @@ export class ZenScriptMemberProvider implements MemberProvider {
   }
 
   private readonly memberRules = defineRules<RuleMap>({
-    SyntheticAstNode: ({ content }) => {
-      if (isNamespaceNode(content)) {
-        return stream(content.children.values()).flatMap(it => it.hasData() ? it.data : createSyntheticAstNode(it))
+    SyntheticAstNode: (element) => {
+      if (isNamespaceNode(element.content)) {
+        return stream(element.content.children.values()).flatMap(it => it.hasData() ? it.data : createSyntheticAstNode(it))
       }
-      return EMPTY_STREAM
     },
 
     Script: (element) => {
@@ -46,7 +45,10 @@ export class ZenScriptMemberProvider implements MemberProvider {
     },
 
     ImportDeclaration: (element) => {
-      return this.streamMembers(element.path.at(-1)?.ref)
+      const entity = element.path.at(-1)?.ref
+      if (entity) {
+        return stream([entity])
+      }
     },
 
     ClassDeclaration: (element) => {
@@ -84,11 +86,8 @@ export class ZenScriptMemberProvider implements MemberProvider {
         return this.streamMembers(entity)
       }
 
-      let elementType = this.typeComputer.inferType(element)
-      if (elementType && isClassType(receiverType) && receiverType.subst) {
-        elementType = elementType.applySubst(receiverType.subst)
-      }
-      return this.streamMembers(elementType)
+      const elementType = this.typeComputer.inferType(element)
+      return this.streamMembers(applySubstIfPresent(receiverType, elementType))
     },
 
     ParenthesizedExpression: (element) => {
@@ -119,14 +118,13 @@ export class ZenScriptMemberProvider implements MemberProvider {
     },
 
     CallExpression: (element) => {
-      const receiver = element.receiver
-      if (ast.isReferenceExpression(receiver) || ast.isAccessExpression(receiver)) {
-        const entity = receiver.entity.ref
+      if (ast.isReferenceExpression(element.receiver) || ast.isAccessExpression(element.receiver)) {
+        const entity = element.receiver.entity.ref
         if (ast.isConstructorDeclaration(entity)) {
-          const owner = AstUtils.getContainerOfType(entity, ast.isClassDeclaration)
-          if (!owner)
+          const classDecl = AstUtils.getContainerOfType(entity, ast.isClassDeclaration)
+          if (!classDecl)
             return EMPTY_STREAM
-          return this.streamMembers(new ClassType(owner.name, owner))
+          return this.streamMembers(new ClassType(classDecl.name, classDecl))
         }
 
         if (ast.isFunctionDeclaration(entity)) {

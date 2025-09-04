@@ -161,18 +161,13 @@ export class ZenScriptTypeFeatures implements TypeFeatures {
         return true
       }
 
-      let toFuncType: Type | undefined
-      if (isFunctionType(to)) {
-        toFuncType = to
-      }
-
-      if (!isFunctionType(toFuncType)) {
+      if (!isFunctionType(to)) {
         return false
       }
 
-      return from.params.length === toFuncType.params.length
-        && this.isConvertible(from.ret, toFuncType.ret)
-        && from.params.every((param, index) => this.isConvertible(param, toFuncType.params[index]))
+      return from.params.length === to.params.length
+        && this.isConvertible(from.ret, to.ret)
+        && from.params.every((param, index) => this.isConvertible(param, to.params[index]))
     },
 
     CompoundType: (from, to) => {
