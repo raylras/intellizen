@@ -1,9 +1,11 @@
 import type { AstNode, CstNode } from 'langium'
 import type { Script, ZenScriptAstType } from '../generated/ast'
+import type { ZenScriptSyntheticAstType } from './synthetic'
 import { AstUtils, DefaultNameProvider, GrammarUtils } from 'langium'
 import { isClassDeclaration, isScript } from '../generated/ast'
 import { isExposed, isStatic, isToplevel } from '../utils/ast'
 import { getName, getQualifiedName } from '../utils/document'
+import { isNamespaceNode } from '../utils/namespace-tree'
 import { defineRules } from '../utils/rule'
 
 declare module 'langium' {
@@ -12,7 +14,7 @@ declare module 'langium' {
   }
 }
 
-type RuleSpec = ZenScriptAstType
+type RuleSpec = ZenScriptAstType & ZenScriptSyntheticAstType
 type RuleMap<R> = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => R | undefined }
 
 export class ZenScriptNameProvider extends DefaultNameProvider {
@@ -42,8 +44,9 @@ export class ZenScriptNameProvider extends DefaultNameProvider {
   }
 
   private readonly nameRules = defineRules<RuleMap<string>>({
+    SyntheticAstNode: element => isNamespaceNode(element.content) ? element.content.name : 'unknown',
     Script: element => element.$document ? getName(element.$document) : undefined,
-    ImportDeclaration: element => element.alias || element.path.at(-1)?.$refText,
+    ImportDeclaration: element => element.alias || element.item?.entity?.$refText,
     FunctionDeclaration: element => element.name || 'lambda function',
     ConstructorDeclaration: element => element.$container.name,
     OperatorFunctionDeclaration: element => element.operator,

@@ -82,13 +82,17 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     NamedType: (element) => {
-      const entity = element.path.at(-1)?.ref
+      const entity = element.item.entity?.ref
       if (ast.isTypeParameter(entity)) {
         return new TypeVariable(entity)
       }
       else if (ast.isClassDeclaration(entity)) {
         return new ClassType(entity.name, entity)
       }
+    },
+
+    ImportDeclaration: (element, env) => {
+      return this.inferType(element.item.entity.ref, env)
     },
 
     VariableDeclaration: (element, env) => {
@@ -165,6 +169,10 @@ export class ZenScriptTypeComputer implements TypeComputer {
         else if (ast.isCallExpression(container2)) {
           const receiverType = this.inferType(container2.receiver, env)
           expect = isFunctionType(receiverType) ? receiverType.params.at(index2) : undefined
+        }
+        else if (ast.isAccessExpression(container2)) {
+          const entityType = this.inferType(container2.entity.ref, env)
+          expect = isFunctionType(entityType) ? entityType.params.at(index2) : undefined
         }
         else {
           expect = undefined
@@ -345,22 +353,24 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     AccessExpression: (element, env) => {
+      const entity = element.entity.ref
       const receiverType = this.inferType(element.receiver, env)
 
-      // Recursive Guard
-      const _ref = (element.entity as any)._ref
-      if (typeof _ref === 'symbol' && _ref.description === 'ref_resolving') {
-        return this.classTypeOf('any')
-      }
-
-      const entityContainer = element.entity.ref?.$container
-      if (ast.isOperatorFunctionDeclaration(entityContainer) && entityContainer.operator === '.') {
+      // handle operator overloading
+      const entityContainer = entity?.$container
+      if (entityContainer && ast.isOperatorFunctionDeclaration(entityContainer) && entityContainer.operator === '.') {
         const retType = this.inferType(entityContainer.retType, env)
         return applySubstIfPresent(receiverType, retType)
       }
 
-      const entityType = this.inferType(element.entity.ref, env)
-      return applySubstIfPresent(receiverType, entityType)
+      const entityType = this.inferType(entity, env)
+      const substituted = applySubstIfPresent(receiverType, entityType)
+      if (element.withArgs) {
+        return isFunctionType(substituted) ? substituted.ret : undefined
+      }
+      else {
+        return substituted
+      }
     },
 
     IndexExpression: (element, env) => {

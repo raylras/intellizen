@@ -29,8 +29,13 @@ interface PackageDeclaration {
 }
 
 interface ImportDeclaration {
-    path: @Entity[]
+    item: ImportItem
     alias?: string
+}
+
+interface ImportItem {
+    previous?: ImportItem
+    entity: @Entity
 }
 
 interface ClassDeclaration {
@@ -340,8 +345,13 @@ type Type = NamedType
     | CompoundType
 
 interface NamedType {
-    path: @Entity[]
+    item: NamedTypeItem
     typeArgs: NamedType[]
+}
+
+interface NamedTypeItem {
+    previous?: NamedTypeItem
+    entity: @Entity
 }
 
 interface ArrayType {

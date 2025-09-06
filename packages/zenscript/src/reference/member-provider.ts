@@ -45,10 +45,11 @@ export class ZenScriptMemberProvider implements MemberProvider {
     },
 
     ImportDeclaration: (element) => {
-      const entity = element.path.at(-1)?.ref
-      if (entity) {
-        return stream([entity])
-      }
+      return this.streamMembers(element.item?.entity?.ref)
+    },
+
+    ImportItem: (element) => {
+      return this.streamMembers(element.entity?.ref)
     },
 
     ClassDeclaration: (element) => {

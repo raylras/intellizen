@@ -1,11 +1,9 @@
 import type { AstNode, LangiumDocument, NameProvider } from 'langium'
 import type { ZenScriptServices } from '../module'
-import type { MemberProvider } from '../reference/member-provider'
 import type { NamespaceNode } from '../utils/namespace-tree'
-import { DocumentState, stream } from 'langium'
+import { AstUtils, DocumentState, stream } from 'langium'
 import { isClassDeclaration } from '../generated/ast'
-import { isStatic } from '../utils/ast'
-import { isZs } from '../utils/document'
+import { isExposed, isStatic } from '../utils/ast'
 import { NamespaceTree } from '../utils/namespace-tree'
 
 export interface PackageManager {
@@ -16,12 +14,10 @@ export interface PackageManager {
 
 export class ZenScriptPackageManager implements PackageManager {
   private readonly packages: NamespaceTree<AstNode> = new NamespaceTree('.')
-  private readonly nameProvider: () => NameProvider
-  private readonly memberProvider: () => MemberProvider
+  private readonly nameProvider: NameProvider
 
   constructor(services: ZenScriptServices) {
-    this.nameProvider = () => services.references.NameProvider
-    this.memberProvider = () => services.references.MemberProvider
+    this.nameProvider = services.references.NameProvider
 
     // insert data once document is indexed content
     services.shared.workspace.DocumentBuilder.onDocumentPhase(DocumentState.IndexedContent, (document) => {
@@ -51,11 +47,11 @@ export class ZenScriptPackageManager implements PackageManager {
 
   private insert(document: LangiumDocument) {
     const root = document.parseResult.value
-    if (isZs(document)) {
+    if (isExposed(root)) {
       this.insertNode(root)
     }
-    const toplevels = this.memberProvider().streamMembers(root)
-    for (const toplevel of toplevels) {
+    const exposedToplevels = AstUtils.streamContents(root).filter(isExposed)
+    for (const toplevel of exposedToplevels) {
       this.insertNode(toplevel)
       if (isClassDeclaration(toplevel)) {
         for (const staticMember of toplevel.members.filter(isStatic)) {
@@ -66,7 +62,7 @@ export class ZenScriptPackageManager implements PackageManager {
   }
 
   private insertNode(node: AstNode) {
-    const name = this.nameProvider().getQualifiedName(node)
+    const name = this.nameProvider.getQualifiedName(node)
     if (name) {
       this.packages.insert(name, node)
     }
@@ -74,11 +70,11 @@ export class ZenScriptPackageManager implements PackageManager {
 
   private remove(document: LangiumDocument) {
     const root = document.parseResult.value
-    if (isZs(document)) {
+    if (isExposed(root)) {
       this.removeNode(root)
     }
-    const toplevels = this.memberProvider().streamMembers(root)
-    for (const toplevel of toplevels) {
+    const exposedToplevels = AstUtils.streamContents(root).filter(isExposed)
+    for (const toplevel of exposedToplevels) {
       this.removeNode(toplevel)
       if (isClassDeclaration(toplevel)) {
         for (const staticMember of toplevel.members.filter(isStatic)) {
@@ -89,7 +85,7 @@ export class ZenScriptPackageManager implements PackageManager {
   }
 
   private removeNode(node: AstNode) {
-    const name = this.nameProvider().getQualifiedName(node)
+    const name = this.nameProvider.getQualifiedName(node)
     if (name) {
       this.packages.findNode(name)?.free()
     }

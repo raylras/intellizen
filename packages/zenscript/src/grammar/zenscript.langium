@@ -12,7 +12,11 @@ entry ZenScript returns Script:
 ;
 
 ImportDeclaration returns ImportDeclaration:
-    'import' path+=[Entity:ID] ('.' path+=[Entity:ID])* ('as' alias=ID)? ';'
+    'import' item=ImportItem ('as' alias=ID)? ';'
+;
+
+ImportItem returns ImportItem:
+  entity=[Entity:ID] ({ImportItem.previous=current} '.' entity=[Entity:ID])*
 ;
 
 ClassDeclaration returns ClassDeclaration:
@@ -381,8 +385,13 @@ FunctionType returns FunctionType:
 ;
 
 NamedType returns NamedType:
-    path+=[Entity:ID] ('.' path+=[Entity:ID])*
+    item=NamedTypeItem
 ;
+
+NamedTypeItem returns NamedTypeItem:
+    entity=[Entity:ID] ({NamedTypeItem.previous=current} '.' entity=[Entity:ID])*
+;
+
 //endregion Type
 
 ID returns string:

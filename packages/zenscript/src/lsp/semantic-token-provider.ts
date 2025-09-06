@@ -14,7 +14,12 @@ import { defineRules } from '../utils/rule'
 
 type RuleSpec = ZenScriptAstType & ZenScriptSyntheticAstType
 type HighlightRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K], acceptor: SemanticTokenAcceptor) => void }
-type SemanticReferenceRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => { type?: SemanticTokenTypes, modifier?: SemanticTokenModifiers } | undefined }
+type SemanticInfoRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => SemanticInfo }
+
+interface SemanticInfo {
+  type?: SemanticTokenTypes
+  modifier?: SemanticTokenModifiers
+}
 
 export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvider {
   constructor(services: ZenScriptServices) {
@@ -27,18 +32,26 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
 
   private readonly highlightRules = defineRules<HighlightRuleMap>({
     ImportDeclaration: (element, acceptor) => {
-      for (let i = 0; i < element.path.length; i++) {
-        const part = element.path[i]
-        const { type, modifier } = this.semanticReferenceRules(part.ref?.$type)?.call(this, part.ref) ?? {}
-        if (type) {
-          acceptor({
-            node: element,
-            property: 'path',
-            index: i,
-            type,
-            modifier,
-          })
-        }
+      const { type, modifier } = this.getSemanticInfo(element.item?.entity?.ref)
+      if (type) {
+        acceptor({
+          node: element,
+          property: 'alias',
+          type,
+          modifier,
+        })
+      }
+    },
+
+    ImportItem: (element, acceptor) => {
+      const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
+      if (type) {
+        acceptor({
+          node: element,
+          property: 'entity',
+          type,
+          modifier,
+        })
       }
     },
 
@@ -122,19 +135,21 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     NamedType: (element, acceptor) => {
       acceptor({
         node: element,
-        property: 'path',
-        type: SemanticTokenTypes.class,
-      })
-      acceptor({
-        node: element,
         property: 'typeArgs',
         type: SemanticTokenTypes.class,
       })
     },
 
+    NamedTypeItem: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'entity',
+        type: SemanticTokenTypes.class,
+      })
+    },
+
     ReferenceExpression: (element, acceptor) => {
-      const entity = element.entity?.ref
-      const { type, modifier } = this.semanticReferenceRules(entity?.$type)?.call(this, entity) ?? {}
+      const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
       if (type) {
         acceptor({
           node: element,
@@ -146,8 +161,7 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     },
 
     AccessExpression: (element, acceptor) => {
-      const entity = element.entity?.ref
-      const { type, modifier } = this.semanticReferenceRules(entity?.$type)?.call(this, entity) ?? {}
+      const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
       if (type) {
         acceptor({
           node: element,
@@ -212,7 +226,15 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     },
   })
 
-  private readonly semanticReferenceRules = defineRules<SemanticReferenceRuleMap>({
+  private getSemanticInfo(element: AstNode | undefined): SemanticInfo {
+    return this.semanticInfoRules(element?.$type)?.call(this, element) ?? {}
+  }
+
+  private readonly semanticInfoRules = defineRules<SemanticInfoRuleMap>({
+    ImportDeclaration: (element) => {
+      return this.getSemanticInfo(element.item?.entity?.ref)
+    },
+
     Script: () => ({
       type: SemanticTokenTypes.namespace,
     }),

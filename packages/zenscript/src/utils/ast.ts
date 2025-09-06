@@ -1,5 +1,5 @@
 import type { AstNode, AstNodeDescription, Stream, URI } from 'langium'
-import type { BracketExpression, ClassDeclaration, ImportDeclaration } from '../generated/ast'
+import type { ClassDeclaration } from '../generated/ast'
 import { AstUtils, isAstNodeDescription } from 'langium'
 import * as ast from '../generated/ast'
 import { isZs } from './document'
@@ -26,9 +26,23 @@ export function isReadonly(node: AstNode | undefined) {
 }
 
 export function isExposed(node: AstNode | undefined) {
-  return (ast.isScript(node) && isZs(AstUtils.getDocument(node)))
-    || (isToplevel(node) && (isStatic(node) || ast.isClassDeclaration(node) || ast.isFunctionDeclaration(node)))
-    || (ast.isClassMemberDeclaration(node) && isStatic(node))
+  if (ast.isScript(node)) {
+    return isZs(AstUtils.getDocument(node))
+  }
+  else if (isToplevel(node)) {
+    if (ast.isFunctionDeclaration(node)) {
+      return node.variance === undefined
+    }
+    else if (ast.isVariableDeclaration(node)) {
+      return node.variance === 'static'
+    }
+    else if (ast.isClassDeclaration(node)) {
+      return true
+    }
+  }
+  else if (ast.isClassMemberDeclaration(node)) {
+    return 'variance' in node && node.variance === 'static'
+  }
 }
 
 export function getDocumentUri(node: AstNode | undefined): URI | undefined {
@@ -41,26 +55,13 @@ export function getDocumentUri(node: AstNode | undefined): URI | undefined {
   }
 }
 
-export function getPathAsString(importDecl: ImportDeclaration, index?: number): string
-export function getPathAsString(bracket: BracketExpression, index?: number): string
-export function getPathAsString(astNode: ImportDeclaration | BracketExpression, index?: number): string {
-  if (ast.isImportDeclaration(astNode)) {
-    let names = astNode.path.map(it => it.$refText)
-    if (index !== undefined) {
-      names = names.slice(0, index + 1)
-    }
-    return names.join('.')
+export function getPathAsString(element: ast.BracketExpression, index?: number): string {
+  const separator = ':'
+  let names = element.path.map(it => it.$cstNode!.text)
+  if (index !== undefined) {
+    names = names.slice(0, index + 1)
   }
-  else if (ast.isBracketExpression(astNode)) {
-    let names = astNode.path.map(it => it.$cstNode!.text)
-    if (index !== undefined) {
-      names = names.slice(0, index + 1)
-    }
-    return names.join(':')
-  }
-  else {
-    throw new Error(`Illegal argument: ${astNode}`)
-  }
+  return names.join(separator)
 }
 
 export function toAstNode(item: AstNode | AstNodeDescription): AstNode | undefined {
@@ -80,7 +81,7 @@ export function streamClassChain(classDecl: ClassDeclaration): Stream<ClassDecla
       yield head
       visited.add(head)
       head.superTypes
-        .map(it => it.path.at(-1)?.ref)
+        .map(it => it.item.entity?.ref)
         .filter(ast.isClassDeclaration)
         .forEach(it => deque.push(it))
     }

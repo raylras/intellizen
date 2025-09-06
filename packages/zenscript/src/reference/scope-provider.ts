@@ -4,17 +4,16 @@ import type { ZenScriptServices } from '../module'
 import type { TypeComputer } from '../typing/type-computer'
 import type { PackageManager } from '../workspace/package-manager'
 import type { MemberProvider } from './member-provider'
-import { substringBeforeLast } from '@intellizen/shared'
 import { AstUtils, DefaultScopeProvider, EMPTY_SCOPE, EMPTY_STREAM, stream, StreamScope } from 'langium'
 import * as ast from '../generated/ast'
 import { isClassType, isFunctionType } from '../typing/type-description'
-import { findMaximumLowerBound, getIndexOfContainer, getPathAsString, isStatic } from '../utils/ast'
+import { findMaximumLowerBound, getIndexOfContainer, isStatic } from '../utils/ast'
 import { defineRules } from '../utils/rule'
 import { generateStream, toStream } from '../utils/stream'
-import { createSyntheticAstNodeDescription } from './synthetic'
+import { createSyntheticAstNode, createSyntheticAstNodeDescription } from './synthetic'
 
 type RuleSpec = ZenScriptAstType
-type RuleMap = { [K in keyof RuleSpec]?: (element: Omit<ReferenceInfo, 'container'> & { container: RuleSpec[K] }) => Scope }
+type RuleMap = { [K in keyof RuleSpec]?: (info: Omit<ReferenceInfo, 'container'> & { container: RuleSpec[K] }) => Scope }
 
 declare module 'langium' {
   interface LocalSymbols {
@@ -44,33 +43,15 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
   }
 
   private readonly scopeRules = defineRules<RuleMap>({
-    ImportDeclaration: ({ container, index }) => {
-      const fullPath = getPathAsString(container, index)
-
-      let subPath: string
-      const endsWithDot = container.$cstNode?.text.endsWith('.') ?? false
-      if (index === undefined && endsWithDot) {
-        subPath = fullPath
+    ImportItem: ({ container }) => {
+      if (container.previous) {
+        const elements = this.memberProvider.streamMembers(container.previous)
+        return this.createScopeForNodes(elements)
       }
       else {
-        subPath = substringBeforeLast(fullPath, '.')
+        const children = this.packageManager.root.children.values().map(createSyntheticAstNode)
+        return this.createScopeForNodes(children)
       }
-
-      const tree = this.packageManager.findNode(subPath)
-      if (!tree) {
-        return EMPTY_SCOPE
-      }
-
-      const elements = stream(tree.children.values()).flatMap((child) => {
-        if (child.hasData()) {
-          return child.data.values().map(it => this.descriptions.getOrCreateDescription(it))
-        }
-        else {
-          return createSyntheticAstNodeDescription(child.name, child)
-        }
-      })
-
-      return new StreamScope(elements)
     },
 
     ReferenceExpression: ({ container }) => {
@@ -106,13 +87,18 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
     },
 
     AccessExpression: ({ container }) => {
-      const members = this.memberProvider.streamMembers(container.receiver)
+      const elements = this.memberProvider.streamMembers(container.receiver)
       const outer = this.createDynamicScope(container)
-      return this.createScopeForNodes(members, outer)
+      return this.createScopeForNodes(elements, outer)
     },
 
-    NamedType: ({ container, index }) => {
-      if (!index) {
+    NamedTypeItem: ({ container }) => {
+      const previous = container.previous?.entity.ref
+      if (previous) {
+        const elements = this.memberProvider.streamMembers(previous)
+        return this.createScopeForNodes(elements)
+      }
+      else {
         let scope: Scope
         scope = this.createPackageNameScope()
         scope = this.createClassNameScope(scope)
@@ -124,11 +110,6 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
               || ast.isImportDeclaration(symbol.node)))
           .reduceRight((outer, symbols) => new StreamScope(symbols, outer), scope)
         return scope
-      }
-      else {
-        const prev = container.path[index - 1].ref
-        const members = this.memberProvider.streamMembers(prev)
-        return this.createScopeForNodes(members)
       }
     },
   })

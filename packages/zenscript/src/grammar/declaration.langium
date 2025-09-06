@@ -13,11 +13,15 @@ entry ZenScriptDeclaration returns Script:
 ;
 
 PackageDeclaration returns PackageDeclaration:
-    'package' path+=ID ('.' path+=ID )* ';'?
+    'package' path+=ID ('.' path+=ID)* ';'?
 ;
 
 ImportDeclaration returns ImportDeclaration:
-    'import' path+=[Entity:ID] ('.' path+=[Entity:ID])* ('as' alias=ID)? ';'?
+    'import' item=ImportItem ('as' alias=ID)? ';'?
+;
+
+ImportItem returns ImportItem:
+    entity=[Entity:ID] ({ImportItem.previous=current} '.' entity=[Entity:ID])*
 ;
 
 ClassDeclaration returns ClassDeclaration:
@@ -128,7 +132,11 @@ FunctionType returns FunctionType:
 ;
 
 NamedType returns NamedType:
-    path+=[Entity:ID] ('.' path+=[Entity:ID])* ('<' typeArgs+=NamedType (',' typeArgs+=NamedType)* '>')?
+    item=NamedTypeItem ('<' typeArgs+=NamedType (',' typeArgs+=NamedType)* '>')?
+;
+
+NamedTypeItem returns NamedTypeItem:
+    entity=[Entity:ID] ({NamedTypeItem.previous=current} '.' entity=[Entity:ID])*
 ;
 
 CompoundType returns CompoundType:

@@ -254,7 +254,7 @@ export class ZenScriptCompletionProvider extends DefaultCompletionProvider {
 
     ImportDeclaration: (element) => {
       return {
-        description: getPathAsString(element),
+        description: element.item.entity.$refText,
       }
     },
 

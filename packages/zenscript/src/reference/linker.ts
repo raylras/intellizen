@@ -1,7 +1,7 @@
 import type { AstNodeDescription, LinkingError, ReferenceInfo } from 'langium'
 import type { ZenScriptServices } from '../module'
 import { DefaultLinker } from 'langium'
-import { isImportDeclaration, isNamedType } from '../generated/ast'
+import { isImportDeclaration, isImportItem, isNamedTypeItem } from '../generated/ast'
 import { createSyntheticAstNodeDescription } from './synthetic'
 
 export class ZenScriptLinker extends DefaultLinker {
@@ -15,19 +15,23 @@ export class ZenScriptLinker extends DefaultLinker {
     if (description) {
       const node = description.node
       if (isImportDeclaration(node) && !node.alias) {
-        return node.path.at(-1)?.$nodeDescription ?? description
+        // trigger linking (available the $nodeDescription)
+        const _sideEffect = node.item.entity.ref
+        const nodeDescription = node.item.entity?.$nodeDescription
+        return nodeDescription ?? description
       }
       else {
         return description
       }
     }
 
-    if (isImportDeclaration(refInfo.container) && refInfo.container.path.some(it => it.error)) {
-      return createSyntheticAstNodeDescription(refInfo.reference.$refText, { $type: 'Unknown' })
-    }
-
-    if (isNamedType(refInfo.container) && refInfo.container.path.some(it => it.error)) {
-      return createSyntheticAstNodeDescription(refInfo.reference.$refText, { $type: 'Unknown' })
+    // Prevent creating a bunch of errors for broken references
+    const { container } = refInfo
+    if (isImportItem(container) || isNamedTypeItem(container)) {
+      if (container.previous?.entity.error) {
+        // Previous is broken; we don't need more errors here
+        return createSyntheticAstNodeDescription(refInfo.reference.$refText, { $type: 'Unknown' })
+      }
     }
 
     return this.createLinkingError(refInfo)
