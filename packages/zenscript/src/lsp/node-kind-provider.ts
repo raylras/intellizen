@@ -29,25 +29,15 @@ export class ZenScriptNodeKindProvider extends DefaultNodeKindProvider {
     TypeParameter: () => SymbolKind.TypeParameter,
     ValueParameter: () => SymbolKind.Variable,
     VariableDeclaration: () => SymbolKind.Variable,
-    SyntheticAstNode: ({ content }) => {
-      if (isNamespaceNode(content)) {
-        return SymbolKind.Module
-      }
-      else if (content.$type === 'Unknown') {
-        return SymbolKind.Variable
-      }
-      else {
-        return SymbolKind.Variable
-      }
-    },
+    SyntheticAstNode: ({ content }) => isNamespaceNode(content) ? SymbolKind.Module : SymbolKind.Variable,
   })
 
   override getCompletionItemKind(node: AstNode | AstNodeDescription): CompletionItemKind {
     const element = toAstNode(node)
-    return this.completionItemRules(element?.$type)?.call(this, element) ?? super.getCompletionItemKind(node)
+    return this.itemKindRules(element?.$type)?.call(this, element) ?? super.getCompletionItemKind(node)
   }
 
-  private readonly completionItemRules = defineRules<RuleMap<CompletionItemKind>>({
+  private readonly itemKindRules = defineRules<RuleMap<CompletionItemKind>>({
     FunctionDeclaration: () => CompletionItemKind.Function,
     ClassDeclaration: () => CompletionItemKind.Class,
     FieldDeclaration: () => CompletionItemKind.Field,
@@ -60,16 +50,6 @@ export class ZenScriptNodeKindProvider extends DefaultNodeKindProvider {
     TypeParameter: () => CompletionItemKind.TypeParameter,
     ValueParameter: () => CompletionItemKind.Variable,
     VariableDeclaration: () => CompletionItemKind.Variable,
-    SyntheticAstNode: ({ content }) => {
-      if (isNamespaceNode(content)) {
-        return CompletionItemKind.Module
-      }
-      else if (content.$type === 'Unknown') {
-        return CompletionItemKind.Variable
-      }
-      else {
-        return CompletionItemKind.Variable
-      }
-    },
+    SyntheticAstNode: ({ content }) => isNamespaceNode(content) ? CompletionItemKind.Module : CompletionItemKind.Variable,
   })
 }
