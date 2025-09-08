@@ -1,4 +1,4 @@
-import type { AstNode, AstNodeDescription, ReferenceInfo, Scope, ScopeOptions, Stream } from 'langium'
+import type { AstNode, AstNodeDescription, ReferenceInfo as ReferenceInfoLangium, Scope, ScopeOptions, Stream } from 'langium'
 import type { ZenScriptAstType } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
 import type { TypeComputer } from '../typing/type-computer'
@@ -7,13 +7,14 @@ import type { MemberProvider } from './member-provider'
 import { AstUtils, DefaultScopeProvider, EMPTY_SCOPE, EMPTY_STREAM, stream, StreamScope } from 'langium'
 import * as ast from '../generated/ast'
 import { isClassType, isFunctionType } from '../typing/type-description'
-import { findMaximumLowerBound, getIndexOfContainer, isStatic } from '../utils/ast'
+import { binarySearchUpperBound, isStatic } from '../utils/ast'
 import { defineRules } from '../utils/rule'
 import { generateStream, toStream } from '../utils/stream'
 import { createSyntheticAstNode, createSyntheticAstNodeDescription } from './synthetic'
 
 type RuleSpec = ZenScriptAstType
-type RuleMap = { [K in keyof RuleSpec]?: (info: Omit<ReferenceInfo, 'container'> & { container: RuleSpec[K] }) => Scope }
+type RuleMap = { [K in keyof RuleSpec]?: (info: ReferenceInfo<K>) => Scope }
+type ReferenceInfo<K extends keyof RuleSpec = any> = Omit<ReferenceInfoLangium, 'container'> & { container: RuleSpec[K] }
 
 declare module 'langium' {
   interface LocalSymbols {
@@ -74,11 +75,11 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
         }
         scope = this.streamLexicalSymbols(seed)
           .map((node) => {
-            const refIndex = getIndexOfContainer(seed, node.container)
-            // Ensure ref's index is greater than symbol's index (declaration before usage)
-            const lowerBound = refIndex ? findMaximumLowerBound(node.symbols, refIndex) : node.symbols.length
-            // Reverse order (nearest first)
-            return stream(node.symbols.slice(0, lowerBound).reverse())
+            const offset = container.$cstNode!.offset
+            // Ensure the ref's offset is greater than the symbol's offset (declaration before usage)
+            const upperBound = binarySearchUpperBound(node.symbols, offset, it => it.node!.$cstNode!.offset)
+            // Reversed order (nearest first)
+            return stream(node.symbols.slice(0, upperBound).reverse())
           })
           .reduceRight((outer, symbols) => new StreamScope(symbols, outer), scope)
       }

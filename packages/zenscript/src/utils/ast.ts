@@ -89,57 +89,41 @@ export function streamClassChain(classDecl: ClassDeclaration): Stream<ClassDecla
 }
 
 /**
- * Binary search for the maximum lower bound of the specified target value.
+ * Binary search for the upper bound of the specified target value.
  *
- * @param symbols The array to search, **MUST** be sorted by `$containerIndex`
+ * @param elements The array to search, **MUST** be sorted
  * @param target The target value
- * @returns The maximum lower bound of the target value in range `[0, symbols.length]`
+ * @param map The mapping function to map the element to a number
+ * @returns The upper bound of the target value in closed range `[0, elements.length]`
  *
  * @example
- * findMaximumLowerBound([1, 3, 5, 7], 6)
+ * binarySearchUpperBound([1, 3, 5, 7], 6)
  * // returns 2
  * // [1, 3, 5, 7]
  * //        ^ bound === 2
  *
  * @example
- * findMaximumLowerBound([1, 3, 5, 7], 10)
+ * binarySearchUpperBound([1, 3, 5, 7], 10)
  * // returns 4
  * // [1, 3, 5, 7]
- * //             ^ bound === symbols.length (Not inside the array)
+ * //             ^ bound === elements.length (Not inside the array)
  *
  * @example
- * findMaximumLowerBound([1, 3, 5, 7], 0)
+ * binarySearchUpperBound([1, 3, 5, 7], 0)
  * // returns 0
  * // [1, 3, 5, 7]
  * //  ^ bound === 0
  */
-export function findMaximumLowerBound(symbols: AstNodeDescription[], target: number): number {
+export function binarySearchUpperBound<E>(elements: E[], target: number, map: (elm: E) => number): number {
   let low = 0
-  let high = symbols.length - 1
+  let high = elements.length - 1
   while (low <= high) {
     const mid = Math.floor(low + (high - low) / 2)
-    const midVal = symbols[mid].node!.$containerIndex!
+    const midVal = map(elements[mid])
     if (midVal < target)
       low = mid + 1
     else
       high = mid - 1
   }
   return low
-}
-
-/**
- * Get the index of the specified node within its container.
- *
- * @param content The starting node to search for
- * @param container The target container node
- * @returns The index of the content node within the container, `undefined` if not found
- */
-export function getIndexOfContainer(content: AstNode, container: AstNode): number | undefined {
-  let node: AstNode | undefined = content
-  while (node) {
-    if (node.$container === container) {
-      return node.$containerIndex
-    }
-    node = node.$container
-  }
 }
