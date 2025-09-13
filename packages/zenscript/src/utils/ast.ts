@@ -9,20 +9,16 @@ export function isToplevel(node: AstNode | undefined): boolean {
   return ast.isScript(node?.$container)
 }
 
-export function isStatic(node: AstNode | undefined) {
+export function isStatic(node: AstNode) {
   return node && 'variance' in node && node.variance === 'static'
 }
 
-export function isGlobal(node: AstNode | undefined) {
+export function isGlobal(node: AstNode) {
   return node && 'variance' in node && node.variance === 'global'
 }
 
-export function isVal(node: AstNode | undefined) {
-  return node && 'variance' in node && node.variance === 'val'
-}
-
-export function isReadonly(node: AstNode | undefined) {
-  return node && 'variance' in node && typeof node.variance === 'string' && /^(?:val|static|global)$/.test(node.variance)
+export function isReadonly(node: AstNode) {
+  return node && 'variance' in node && typeof node.variance === 'string' && /val|static|global/.test(node.variance)
 }
 
 export function isExposed(node: AstNode | undefined) {
@@ -88,42 +84,13 @@ export function streamClassChain(classDecl: ClassDeclaration): Stream<ClassDecla
   })
 }
 
-/**
- * Binary search for the upper bound of the specified target value.
- *
- * @param elements The array to search, **MUST** be sorted
- * @param target The target value
- * @param map The mapping function to map the element to a number
- * @returns The upper bound of the target value in closed range `[0, elements.length]`
- *
- * @example
- * binarySearchUpperBound([1, 3, 5, 7], 6)
- * // returns 2
- * // [1, 3, 5, 7]
- * //        ^ bound === 2
- *
- * @example
- * binarySearchUpperBound([1, 3, 5, 7], 10)
- * // returns 4
- * // [1, 3, 5, 7]
- * //             ^ bound === elements.length (Not inside the array)
- *
- * @example
- * binarySearchUpperBound([1, 3, 5, 7], 0)
- * // returns 0
- * // [1, 3, 5, 7]
- * //  ^ bound === 0
- */
-export function binarySearchUpperBound<E>(elements: E[], target: number, map: (elm: E) => number): number {
-  let low = 0
-  let high = elements.length - 1
-  while (low <= high) {
-    const mid = Math.floor(low + (high - low) / 2)
-    const midVal = map(elements[mid])
-    if (midVal < target)
-      low = mid + 1
-    else
-      high = mid - 1
+export function getDirectChildOf(container: AstNode, seed: AstNode): AstNode {
+  let node: AstNode | undefined = seed
+  while (node) {
+    if (node.$container === container) {
+      return node
+    }
+    node = node.$container
   }
-  return low
+  throw new Error('Direct child not found')
 }

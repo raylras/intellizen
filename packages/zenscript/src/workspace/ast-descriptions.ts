@@ -5,7 +5,7 @@ import { getDocumentUri } from '../utils/ast'
 
 declare module 'langium' {
   interface AstNodeDescriptionProvider {
-    getOrCreateDescription: (node: AstNode, uri?: URI, name?: string) => AstNodeDescription
+    getOrCreateDescription: (node: AstNode, name: string, uri?: URI,) => AstNodeDescription
   }
 }
 
@@ -20,35 +20,31 @@ export class ZenScriptAstNodeDescriptionProvider implements AstNodeDescriptionPr
     this.cache = new WeakMap()
   }
 
-  public getOrCreateDescription(node: AstNode, uri?: URI, name?: string): AstNodeDescription {
+  getOrCreateDescription(node: AstNode, name: string, uri?: URI): AstNodeDescription {
     let desc = this.cache.get(node)
     if (desc) {
       return desc
     }
     else {
-      desc = uri ? this.createDescriptionWithUri(node, uri, name) : this.createDescription(node, name)
+      desc = uri ? this.createDescriptionWithUri(node, name, uri) : this.createDescription(node, name)
       this.cache.set(node, desc)
       return desc
     }
   }
 
-  public createDescription(node: AstNode, name?: string, document?: LangiumDocument): AstNodeDescription {
+  createDescription(node: AstNode, name: string, document?: LangiumDocument): AstNodeDescription {
     const uri = document?.uri ?? getDocumentUri(node) ?? URI.from({ scheme: 'unknown' })
-    return this.createDescriptionWithUri(node, uri, name)
+    return this.createDescriptionWithUri(node, name, uri)
   }
 
-  public createDescriptionWithUri(node: AstNode, uri: URI, name?: string): AstNodeDescription {
-    const nameProvider = this.nameProvider
+  createDescriptionWithUri(node: AstNode, name: string, uri: URI): AstNodeDescription {
     const astNodeLocator = this.astNodeLocator
+    const nameProvider = this.nameProvider
     return {
       node,
+      name,
       type: node.$type,
       documentUri: uri,
-      get name() {
-        const _name = name ?? nameProvider.getName(node) ?? 'unknown name'
-        Object.defineProperty(this, 'name', { value: _name })
-        return _name
-      },
       get nameSegment() {
         const nameNode = nameProvider.getNameNode(node) ?? node.$cstNode
         const _nameSegment = CstUtils.toDocumentSegment(nameNode)

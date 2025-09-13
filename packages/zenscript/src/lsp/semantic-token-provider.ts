@@ -6,7 +6,7 @@ import type { ZenScriptSyntheticAstType } from '../reference/synthetic'
 import { stream } from 'langium'
 import { AbstractSemanticTokenProvider } from 'langium/lsp'
 import { SemanticTokenModifiers, SemanticTokenTypes } from 'vscode-languageserver'
-import { isBracketLocation } from '../generated/ast'
+import { isBracketLocation, isOperatorFunctionDeclaration } from '../generated/ast'
 import { isReadonly } from '../utils/ast'
 import { firstTokenTypeName } from '../utils/cst'
 import { isNamespaceNode } from '../utils/namespace-tree'
@@ -44,15 +44,13 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     },
 
     ImportItem: (element, acceptor) => {
-      const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
-      if (type) {
-        acceptor({
-          node: element,
-          property: 'entity',
-          type,
-          modifier,
-        })
-      }
+      const { type = SemanticTokenTypes.namespace, modifier } = this.getSemanticInfo(element.entity?.ref)
+      acceptor({
+        node: element,
+        property: 'entity',
+        type,
+        modifier,
+      })
     },
 
     IntegerLiteral: (element, acceptor) => {
@@ -161,14 +159,24 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     },
 
     AccessExpression: (element, acceptor) => {
-      const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
-      if (type) {
+      const entity = element.entity?.ref
+      if (isOperatorFunctionDeclaration(entity?.$container) && entity.$container.operator === '.') {
         acceptor({
           node: element,
           property: 'entity',
-          type,
-          modifier,
+          type: SemanticTokenTypes.string,
         })
+      }
+      else {
+        const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
+        if (type) {
+          acceptor({
+            node: element,
+            property: 'entity',
+            type,
+            modifier,
+          })
+        }
       }
     },
 
@@ -280,7 +288,7 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
         return { type: SemanticTokenTypes.namespace }
       }
       else {
-        return { type: SemanticTokenTypes.variable }
+        return {}
       }
     },
   })

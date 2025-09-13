@@ -36,6 +36,10 @@ export class ZenScriptMemberProvider implements MemberProvider {
       }
     },
 
+    NamedTypeItem: (element) => {
+      return this.streamMembers(element.entity.ref)
+    },
+
     Script: (element) => {
       return stream<AstNode>(
         element.classes,
@@ -72,7 +76,7 @@ export class ZenScriptMemberProvider implements MemberProvider {
     },
 
     AccessExpression: (element) => {
-      const entity = element.entity.ref
+      const entity = element.entity?.ref
       if (!entity) {
         return EMPTY_STREAM
       }

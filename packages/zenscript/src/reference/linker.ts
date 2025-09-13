@@ -1,4 +1,5 @@
 import type { AstNodeDescription, LinkingError, ReferenceInfo } from 'langium'
+import type { ImportItem, NamedTypeItem } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
 import { DefaultLinker } from 'langium'
 import { isImportDeclaration, isImportItem, isNamedTypeItem } from '../generated/ast'
@@ -9,9 +10,9 @@ export class ZenScriptLinker extends DefaultLinker {
     super(services)
   }
 
-  override getCandidate(refInfo: ReferenceInfo): AstNodeDescription | LinkingError {
-    const scope = this.scopeProvider.getScope(refInfo)
-    const description = scope.getElement(refInfo.reference.$refText)
+  override getCandidate(info: ReferenceInfo): AstNodeDescription | LinkingError {
+    const scope = this.scopeProvider.getScope(info)
+    const description = scope.getElement(info.reference.$refText)
     if (description) {
       const node = description.node
       if (isImportDeclaration(node) && !node.alias) {
@@ -26,15 +27,23 @@ export class ZenScriptLinker extends DefaultLinker {
     }
 
     // Prevent creating a bunch of errors for broken references
-    const { container } = refInfo
-    if (isImportItem(container) || isNamedTypeItem(container)) {
-      if (container.previous?.entity.error) {
+    if (isImportItem(info.container) || isNamedTypeItem(info.container)) {
+      let node: ImportItem | NamedTypeItem | undefined = info.container
+      let isBroken = false
+      while (node) {
+        if (node.previous?.entity.error) {
+          isBroken = true
+          break
+        }
+        node = node.previous
+      }
+      if (isBroken) {
         // Previous is broken; we don't need more errors here
-        return createSyntheticAstNodeDescription(refInfo.reference.$refText, { $type: 'Unknown' })
+        return createSyntheticAstNodeDescription(info.reference.$refText, { $type: 'Unknown' })
       }
     }
 
-    return this.createLinkingError(refInfo)
+    return this.createLinkingError(info)
   }
 
   override getCandidates(refInfo: ReferenceInfo): AstNodeDescription[] | LinkingError {

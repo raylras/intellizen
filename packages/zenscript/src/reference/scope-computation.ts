@@ -13,18 +13,15 @@ export class ZenScriptScopeComputation extends DefaultScopeComputation {
     if (isGlobal(node)) {
       const name = this.nameProvider.getName(node)
       if (name) {
-        exports.push(this.descriptions.getOrCreateDescription(node, document.uri, name))
+        exports.push(this.descriptions.getOrCreateDescription(node, name, document.uri))
       }
     }
   }
 
   override addLocalSymbol(node: AstNode, document: LangiumDocument, symbols: MultiMap<AstNode, AstNodeDescription>): void {
-    const container = node.$container
-    if (container) {
-      const name = this.nameProvider.getName(node)
-      if (name) {
-        symbols.add(container, this.descriptions.getOrCreateDescription(node, document.uri, name))
-      }
+    const name = this.nameProvider.getName(node)
+    if (name) {
+      symbols.add(node, this.descriptions.getOrCreateDescription(node, name, document.uri))
     }
   }
 }
