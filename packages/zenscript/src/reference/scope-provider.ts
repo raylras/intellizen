@@ -2,11 +2,12 @@ import type { AstNode, AstNodeDescription, LocalSymbols, ReferenceInfo, Scope, S
 import type { ZenScriptAstType } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
 import type { TypeComputer } from '../typing/type-computer'
+import type { Type } from '../typing/type-description'
 import type { PackageManager } from '../workspace/package-manager'
 import type { MemberProvider } from './member-provider'
-import { AstUtils, DefaultScopeProvider, EMPTY_SCOPE, stream, StreamScope } from 'langium'
+import { AstUtils, DefaultScopeProvider, EMPTY_SCOPE, EMPTY_STREAM, stream, StreamScope } from 'langium'
 import * as ast from '../generated/ast'
-import { isClassType, isFunctionType } from '../typing/type-description'
+import { getSubstType, isArrayType, isClassType, isFunctionType, isListType } from '../typing/type-description'
 import { getDirectChildOf } from '../utils/ast'
 import { defineRules } from '../utils/rule'
 import { createSyntheticAstNodeDescription } from './synthetic'
@@ -179,22 +180,24 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
           yield provider.descriptions.createDescription(overload.params[0], info.reference.$refText)
         }
       }
+      else if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.AccessExpression.args) {
+          const type = provider.getParamType(child.$containerIndex!, node.entity?.ref)
+          if (type) {
+            yield* provider.getTypeStaticSymbols(type)
+          }
+        }
+      }
     },
 
     * CallExpression(node, info, provider) {
       if (ast.isReferenceExpression(info.container)) {
         const child = getDirectChildOf(node, info.container)
         if (child.$containerProperty === ast.CallExpression.args) {
-          const receiverType = provider.typeComputer.inferType(node.receiver)
-          if (isFunctionType(receiverType)) {
-            const paramType = receiverType.params[child.$containerIndex!]
-            if (isClassType(paramType) && paramType.decl) {
-              yield* stream(paramType.decl.members)
-                .filter(ast.isFunctionDeclaration)
-                .filter(it => it.variance === 'static')
-                .filter(it => it.params.length === 0)
-                .map(it => provider.descriptions.getOrCreateDescription(it, it.name))
-            }
+          const type = provider.getParamType(child.$containerIndex!, node.receiver)
+          if (type) {
+            yield* provider.getTypeStaticSymbols(type)
           }
         }
       }
@@ -211,6 +214,23 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
             const self = node
             yield* provider.toDescriptions([locals, params, self], documentSymbols)
           }
+        }
+      }
+    },
+
+    * ArrayLiteral(node, info, provider) {
+      let expect: Type | undefined
+      if (ast.isTypeCastExpression(node.$container)) {
+        expect = provider.typeComputer.inferType(node.$container)
+      }
+      else {
+        expect = undefined
+      }
+
+      if (isArrayType(expect) || isListType(expect)) {
+        const elementType = getSubstType(expect, 'T')
+        if (elementType) {
+          yield* provider.getTypeStaticSymbols(elementType)
         }
       }
     },
@@ -281,5 +301,25 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
       level = level.$container
     }
     return stream(deque).flat()
+  }
+
+  private getParamType(index: number, receiver: AstNode | undefined): Type | undefined {
+    const receiverType = this.typeComputer.inferType(receiver)
+    if (isFunctionType(receiverType)) {
+      return receiverType.params[index]
+    }
+  }
+
+  private getTypeStaticSymbols(type: Type): Stream<AstNodeDescription> {
+    if (isClassType(type) && type.decl) {
+      return stream(type.decl.members)
+        .filter(ast.isFunctionDeclaration)
+        .filter(it => it.variance === 'static')
+        .filter(it => it.params.length === 0)
+        .map(it => this.descriptions.getOrCreateDescription(it, it.name))
+    }
+    else {
+      return EMPTY_STREAM
+    }
   }
 }

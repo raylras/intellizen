@@ -64,10 +64,10 @@ export function toAstNode(item: AstNode | AstNodeDescription): AstNode | undefin
   return isAstNodeDescription(item) ? item.node : item
 }
 
-export function streamClassChain(classDecl: ClassDeclaration): Stream<ClassDeclaration> {
+export function streamClassChain(decl: ClassDeclaration | undefined): Stream<ClassDeclaration> {
   return toStream(function* () {
     const visited = new Set<ClassDeclaration>()
-    const deque = [classDecl]
+    const deque = [decl]
     while (deque.length) {
       const head = deque.shift()
       if (!head || visited.has(head)) {

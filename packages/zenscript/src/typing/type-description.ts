@@ -1,3 +1,4 @@
+import type { AstNode } from 'langium'
 import type { ClassDeclaration, Declaration, TypeParameter } from '../generated/ast'
 
 // region TypeDescription
@@ -20,6 +21,11 @@ export function makeSubst(...entries: [TypeParameter, Type][]): Substitution {
 
 export function applySubstIfPresent(from: Type | undefined, to: Type | undefined): Type | undefined {
   return isClassType(from) ? to?.applySubst(from.subst) : to
+}
+
+export function getSubstType(type: ClassType, name: string): Type | undefined {
+  const tp = type.decl?.typeParams.find(it => it.name === name)
+  return type?.subst?.get(tp!)
 }
 
 export interface Type {
@@ -164,6 +170,24 @@ export class CompoundType implements Type {
 
   toString(): string {
     return this.types.map(it => it.toString()).join(', ')
+  }
+}
+
+export class UnknownType implements Type {
+  $type = 'UnknownType'
+  name?: string
+  decl?: AstNode
+  constructor(name?: string, decl?: AstNode) {
+    this.name = name
+    this.decl = decl
+  }
+
+  applySubst(_subst: Substitution | undefined): Type {
+    return this
+  }
+
+  toString(): string {
+    return this.name ?? '?'
   }
 }
 // endregion

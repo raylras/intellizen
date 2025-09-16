@@ -7,18 +7,18 @@ import { stream } from 'langium'
 import { AbstractSemanticTokenProvider } from 'langium/lsp'
 import { SemanticTokenModifiers, SemanticTokenTypes } from 'vscode-languageserver'
 import { isBracketLocation, isOperatorFunctionDeclaration } from '../generated/ast'
-import { isReadonly } from '../utils/ast'
+import { isReadonly, isStatic } from '../utils/ast'
 import { firstTokenTypeName } from '../utils/cst'
 import { isNamespaceNode } from '../utils/namespace-tree'
 import { defineRules } from '../utils/rule'
 
 type RuleSpec = ZenScriptAstType & ZenScriptSyntheticAstType
 type HighlightRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K], acceptor: SemanticTokenAcceptor) => void }
-type SemanticInfoRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => SemanticInfo }
+type SemanticInfoRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => SemanticInfo | undefined }
 
 interface SemanticInfo {
   type?: SemanticTokenTypes
-  modifier?: SemanticTokenModifiers
+  modifier?: SemanticTokenModifiers | SemanticTokenModifiers[]
 }
 
 export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvider {
@@ -208,28 +208,22 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     },
 
     FieldDeclaration: (element, acceptor) => {
-      const modifier = [SemanticTokenModifiers.declaration]
-      if (isReadonly(element)) {
-        modifier.push(SemanticTokenModifiers.readonly)
-      }
+      const { type = SemanticTokenTypes.property, modifier = [] } = this.getSemanticInfo(element)
       acceptor({
         node: element,
         property: 'name',
-        type: SemanticTokenTypes.property,
-        modifier,
+        type,
+        modifier: [SemanticTokenModifiers.declaration, modifier].flat(),
       })
     },
 
     VariableDeclaration: (element, acceptor) => {
-      const modifier = [SemanticTokenModifiers.declaration]
-      if (isReadonly(element)) {
-        modifier.push(SemanticTokenModifiers.readonly)
-      }
+      const { type = SemanticTokenTypes.variable, modifier = [] } = this.getSemanticInfo(element)
       acceptor({
         node: element,
         property: 'name',
-        type: SemanticTokenTypes.variable,
-        modifier,
+        type,
+        modifier: [SemanticTokenModifiers.declaration, modifier].flat(),
       })
     },
   })
@@ -273,22 +267,37 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
       type: SemanticTokenTypes.typeParameter,
     }),
 
-    FieldDeclaration: element => ({
-      type: SemanticTokenTypes.property,
-      modifier: isReadonly(element) ? SemanticTokenModifiers.readonly : undefined,
-    }),
+    FieldDeclaration: (element) => {
+      const modifier: SemanticTokenModifiers[] = []
+      if (isReadonly(element)) {
+        modifier.push(SemanticTokenModifiers.readonly)
+      }
+      if (isStatic(element)) {
+        modifier.push(SemanticTokenModifiers.static)
+      }
+      return {
+        type: SemanticTokenTypes.property,
+        modifier,
+      }
+    },
 
-    VariableDeclaration: element => ({
-      type: SemanticTokenTypes.variable,
-      modifier: isReadonly(element) ? SemanticTokenModifiers.readonly : undefined,
-    }),
+    VariableDeclaration: (element) => {
+      const modifier: SemanticTokenModifiers[] = []
+      if (isReadonly(element)) {
+        modifier.push(SemanticTokenModifiers.readonly)
+      }
+      if (isStatic(element)) {
+        modifier.push(SemanticTokenModifiers.static)
+      }
+      return {
+        type: SemanticTokenTypes.variable,
+        modifier,
+      }
+    },
 
     SyntheticAstNode: ({ content }) => {
       if (isNamespaceNode(content)) {
         return { type: SemanticTokenTypes.namespace }
-      }
-      else {
-        return {}
       }
     },
   })

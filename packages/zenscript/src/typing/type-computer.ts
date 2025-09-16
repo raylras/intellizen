@@ -12,11 +12,11 @@ import { defineRules } from '../utils/rule'
 import { applySubstIfPresent, ClassType, CompoundType, FunctionType, IntersectionType, isAnyType, isClassType, isFunctionType, TypeVariable } from './type-description'
 
 type RuleSpec = ast.ZenScriptAstType & ZenScriptSyntheticAstType
-type RuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K], env: Gamma) => Type | undefined }
-type Gamma = ImmutableMap<string, Type>
+type RuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K], env: TypeEnv) => Type | undefined }
+type TypeEnv = ImmutableMap<string, Type>
 
 export interface TypeComputer {
-  inferType: (node: AstNode | undefined, env?: Gamma) => Type | undefined
+  inferType: (node: AstNode | undefined, env?: TypeEnv) => Type | undefined
 }
 
 export class ZenScriptTypeComputer implements TypeComputer {
@@ -30,7 +30,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
     this.memberProvider = () => services.references.MemberProvider
   }
 
-  public inferType(node: AstNode | undefined, env: Gamma = ImmutableMap()): Type | undefined {
+  public inferType(node: AstNode | undefined, env: TypeEnv = ImmutableMap()): Type | undefined {
     return this.inferRules(node?.$type)?.call(this, node, env)
   }
 
@@ -92,7 +92,7 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     ImportDeclaration: (element, env) => {
-      return this.inferType(element.item.entity.ref, env)
+      return this.inferType(element.item.entity?.ref, env)
     },
 
     VariableDeclaration: (element, env) => {
@@ -146,11 +146,16 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     ValueParameter: (element, env) => {
+      if (env.has(element.name)) {
+        return env.get(element.name)
+      }
+
+      const newEnv = env.set(element.name, this.classTypeOf('any'))
       if (element.type) {
-        return this.inferType(element.type, env)
+        return this.inferType(element.type, newEnv)
       }
       else if (element.defaultValue) {
-        return this.inferType(element.defaultValue, env)
+        return this.inferType(element.defaultValue, newEnv)
       }
       else if (ast.isFunctionExpression(element.$container)) {
         const container = element.$container
@@ -160,18 +165,21 @@ export class ZenScriptTypeComputer implements TypeComputer {
         const index2 = container.$containerIndex!
 
         let expect: Type | undefined
-        if (ast.isAssignmentExpression(container2) && container2.operator === '=') {
-          expect = this.inferType(container2.left, env)
+        if (ast.isTypeCastExpression(container2)) {
+          expect = this.inferType(container2.type, newEnv)
+        }
+        else if (ast.isAssignmentExpression(container2) && container2.operator === '=') {
+          expect = this.inferType(container2.left, newEnv)
         }
         else if (ast.isVariableDeclaration(container2)) {
-          expect = this.inferType(container2.type, env)
+          expect = this.inferType(container2.type, newEnv)
         }
         else if (ast.isCallExpression(container2)) {
-          const receiverType = this.inferType(container2.receiver, env)
+          const receiverType = this.inferType(container2.receiver, newEnv)
           expect = isFunctionType(receiverType) ? receiverType.params.at(index2) : undefined
         }
         else if (ast.isAccessExpression(container2)) {
-          const entityType = this.inferType(container2.entity.ref, env)
+          const entityType = this.inferType(container2.entity?.ref, newEnv)
           expect = isFunctionType(entityType) ? entityType.params.at(index2) : undefined
         }
         else {
@@ -341,19 +349,11 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     ReferenceExpression: (element, env) => {
-      const name = element.entity.$refText
-      const type = env.get(name)
-      if (type) {
-        return type
-      }
-      else {
-        const newEnv = env.set(name, this.classTypeOf('any'))
-        return this.inferType(element.entity.ref, newEnv) ?? this.classTypeOf('any')
-      }
+      return this.inferType(element.entity?.ref, env)
     },
 
     AccessExpression: (element, env) => {
-      const entity = element.entity.ref
+      const entity = element.entity?.ref
       const receiverType = this.inferType(element.receiver, env)
 
       // handle operator overloading
@@ -366,7 +366,12 @@ export class ZenScriptTypeComputer implements TypeComputer {
       const entityType = this.inferType(entity, env)
       const substituted = applySubstIfPresent(receiverType, entityType)
       if (element.withArgs) {
-        return isFunctionType(substituted) ? substituted.ret : undefined
+        if (ast.isClassDeclaration(entity)) {
+          return new ClassType(entity.name, entity)
+        }
+        else if (isFunctionType(substituted)) {
+          return substituted.ret
+        }
       }
       else {
         return substituted
@@ -390,16 +395,16 @@ export class ZenScriptTypeComputer implements TypeComputer {
 
     CallExpression: (element, env) => {
       if (ast.isReferenceExpression(element.receiver)) {
-        const receiver = element.receiver.entity.ref
-        if (!receiver) {
-          return
-        }
+        const receiver = element.receiver.entity?.ref
         if (ast.isConstructorDeclaration(receiver)) {
           const classDecl = AstUtils.getContainerOfType(receiver, ast.isClassDeclaration)
           if (!classDecl) {
             return
           }
           return new ClassType(classDecl.name, classDecl)
+        }
+        else if (ast.isClassDeclaration(receiver)) {
+          return new ClassType(receiver.name, receiver)
         }
       }
       const receiverType = this.inferType(element.receiver, env)

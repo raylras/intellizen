@@ -3,13 +3,13 @@ import type { ZenScriptServices } from '../module'
 import type { TypeComputer } from '../typing/type-computer'
 import type { Type, ZenScriptType } from '../typing/type-description'
 import type { ZenScriptSyntheticAstType } from './synthetic'
-import { AstUtils, EMPTY_STREAM, stream } from 'langium'
+import { EMPTY_STREAM, stream } from 'langium'
 import * as ast from '../generated/ast'
-import { applySubstIfPresent, ClassType, isAnyType, isFunctionType } from '../typing/type-description'
+import { applySubstIfPresent, ClassType } from '../typing/type-description'
 import { isStatic, streamClassChain } from '../utils/ast'
 import { isNamespaceNode } from '../utils/namespace-tree'
 import { defineRules } from '../utils/rule'
-import { createSyntheticAstNode, isSyntheticAstNode } from './synthetic'
+import { createSyntheticAstNode } from './synthetic'
 
 export interface MemberProvider {
   streamMembers: (element: AstNode | Type | undefined) => Stream<AstNode>
@@ -27,6 +27,11 @@ export class ZenScriptMemberProvider implements MemberProvider {
 
   public streamMembers(element: AstNode | Type | undefined): Stream<AstNode> {
     return this.memberRules(element?.$type)?.call(this, element) ?? EMPTY_STREAM
+  }
+
+  private streamTypeMembers(element: AstNode): Stream<AstNode> {
+    const type = this.typeComputer.inferType(element)
+    return this.streamMembers(type)
   }
 
   private readonly memberRules = defineRules<RuleMap>({
@@ -60,133 +65,68 @@ export class ZenScriptMemberProvider implements MemberProvider {
       return stream(element.members).filter(isStatic)
     },
 
-    VariableDeclaration: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
+    VariableDeclaration: element => this.streamTypeMembers(element),
 
-    LoopParameter: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
+    LoopParameter: element => this.streamTypeMembers(element),
 
-    ValueParameter: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
+    ValueParameter: element => this.streamTypeMembers(element),
+
+    ParenthesizedExpression: element => this.streamTypeMembers(element),
+
+    PrefixExpression: element => this.streamTypeMembers(element),
+
+    InfixExpression: element => this.streamTypeMembers(element),
+
+    IndexExpression: element => this.streamTypeMembers(element),
+
+    CallExpression: element => this.streamTypeMembers(element),
+
+    BracketExpression: element => this.streamTypeMembers(element),
+
+    FieldDeclaration: element => this.streamTypeMembers(element),
+
+    StringLiteral: element => this.streamTypeMembers(element),
+
+    StringTemplate: element => this.streamTypeMembers(element),
+
+    IntegerLiteral: element => this.streamTypeMembers(element),
+
+    FloatLiteral: element => this.streamTypeMembers(element),
+
+    BooleanLiteral: element => this.streamTypeMembers(element),
 
     AccessExpression: (element) => {
-      const entity = element.entity?.ref
-      if (!entity) {
-        return EMPTY_STREAM
+      if (element.withArgs) {
+        return this.streamTypeMembers(element)
       }
 
-      if (isSyntheticAstNode(entity) || ast.isScript(entity) || ast.isClassDeclaration(entity)) {
-        return this.streamMembers(entity)
+      const entity = element.entity?.ref
+      if (!entity) {
+        return
       }
 
       const receiverType = this.typeComputer.inferType(element.receiver)
       if (!receiverType) {
-        // may be static declaration
         return this.streamMembers(entity)
       }
 
       const elementType = this.typeComputer.inferType(element)
-      return this.streamMembers(applySubstIfPresent(receiverType, elementType))
-    },
-
-    ParenthesizedExpression: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    PrefixExpression: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    InfixExpression: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    IndexExpression: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
+      const substituted = applySubstIfPresent(receiverType, elementType)
+      return this.streamMembers(substituted)
     },
 
     ReferenceExpression: (element) => {
-      if (element.entity.$refText === 'this' && ast.isClassDeclaration(element.entity.ref)) {
-        return this.streamMembers(new ClassType(element.entity.$refText, element.entity.ref))
+      const entity = element.entity?.ref
+      const name = element.entity.$refText
+      if (name === 'this' && ast.isClassDeclaration(entity)) {
+        return this.streamMembers(new ClassType(entity.name, entity))
       }
-      return this.streamMembers(element.entity.ref)
-    },
-
-    CallExpression: (element) => {
-      if (ast.isReferenceExpression(element.receiver) || ast.isAccessExpression(element.receiver)) {
-        const entity = element.receiver.entity.ref
-        if (ast.isConstructorDeclaration(entity)) {
-          const classDecl = AstUtils.getContainerOfType(entity, ast.isClassDeclaration)
-          if (!classDecl)
-            return EMPTY_STREAM
-          return this.streamMembers(new ClassType(classDecl.name, classDecl))
-        }
-
-        if (ast.isFunctionDeclaration(entity)) {
-          const retType = this.typeComputer.inferType(entity.retType)
-          return this.streamMembers(retType)
-        }
+      else {
+        return this.streamMembers(entity)
       }
-
-      const receiverType = this.typeComputer.inferType(element.receiver)
-      if (isFunctionType(receiverType)) {
-        return this.streamMembers(receiverType.ret)
-      }
-      if (isAnyType(receiverType)) {
-        return this.streamMembers(receiverType)
-      }
-      return EMPTY_STREAM
-    },
-
-    BracketExpression: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    FieldDeclaration: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    StringLiteral: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    StringTemplate: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    IntegerLiteral: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    FloatLiteral: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
-    },
-
-    BooleanLiteral: (element) => {
-      const type = this.typeComputer.inferType(element)
-      return this.streamMembers(type)
     },
 
     ClassType: (element) => {
-      if (!element.decl) {
-        return EMPTY_STREAM
-      }
       return streamClassChain(element.decl)
         .flatMap(it => it.members)
         .filter(it => !isStatic(it))
