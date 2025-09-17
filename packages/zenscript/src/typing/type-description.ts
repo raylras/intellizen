@@ -1,5 +1,7 @@
 import type { AstNode } from 'langium'
 import type { ClassDeclaration, Declaration, TypeParameter } from '../generated/ast'
+import { isNamed } from 'langium'
+import { isNamedType } from '../generated/ast'
 
 // region TypeDescription
 export interface ZenScriptType {
@@ -9,6 +11,7 @@ export interface ZenScriptType {
   IntersectionType: IntersectionType
   CompoundType: CompoundType
   TypeVariable: TypeVariable
+  UnknownType: UnknownType
 }
 
 export type BuiltinTypes = 'any' | 'bool' | 'byte' | 'short' | 'int' | 'long' | 'float' | 'double' | 'string' | 'void' | 'Array' | 'List' | 'Map' | 'Entry' | 'stanhebben.zenscript.value.IntRange'
@@ -174,12 +177,23 @@ export class CompoundType implements Type {
 }
 
 export class UnknownType implements Type {
-  $type = 'UnknownType'
-  name?: string
-  decl?: AstNode
-  constructor(name?: string, decl?: AstNode) {
-    this.name = name
-    this.decl = decl
+  readonly $type = 'UnknownType'
+  readonly name?: string
+  readonly node?: AstNode
+
+  constructor(options?: { name?: string, node?: AstNode }) {
+    this.node = options?.node
+    if (typeof options?.name === 'string') {
+      this.name = options.name
+    }
+    else if (options?.node) {
+      if (isNamed(options.node)) {
+        this.name = options.node.name
+      }
+      else if (isNamedType(options.node)) {
+        this.name = options.node.item.entity.$refText
+      }
+    }
   }
 
   applySubst(_subst: Substitution | undefined): Type {
@@ -267,5 +281,9 @@ export function isCompoundType(type: unknown): type is CompoundType {
 
 export function isTypeVariable(type: unknown): type is TypeVariable {
   return type instanceof TypeVariable
+}
+
+export function isUnknownType(type: unknown): type is UnknownType {
+  return type instanceof UnknownType
 }
 // endregion

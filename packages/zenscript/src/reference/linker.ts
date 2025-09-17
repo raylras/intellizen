@@ -1,9 +1,10 @@
-import type { AstNodeDescription, LinkingError, ReferenceInfo } from 'langium'
+import type { AstNode, AstNodeDescription, LinkingError, ReferenceInfo } from 'langium'
 import type { ImportItem, NamedTypeItem } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
+import type { SyntheticAstNode } from './synthetic'
 import { DefaultLinker } from 'langium'
 import { isImportDeclaration, isImportItem, isNamedTypeItem } from '../generated/ast'
-import { createSyntheticAstNodeDescription } from './synthetic'
+import { createSyntheticDescription, isSyntheticAstNode, SyntheticUnknown } from './synthetic'
 
 export class ZenScriptLinker extends DefaultLinker {
   constructor(services: ZenScriptServices) {
@@ -14,16 +15,7 @@ export class ZenScriptLinker extends DefaultLinker {
     const scope = this.scopeProvider.getScope(info)
     const description = scope.getElement(info.reference.$refText)
     if (description) {
-      const node = description.node
-      if (isImportDeclaration(node) && !node.alias) {
-        // trigger linking (available the $nodeDescription)
-        const _sideEffect = node.item.entity.ref
-        const nodeDescription = node.item.entity?.$nodeDescription
-        return nodeDescription ?? description
-      }
-      else {
-        return description
-      }
+      return this.redirectIfNeeded(description)
     }
 
     // Prevent creating a bunch of errors for broken references
@@ -39,11 +31,25 @@ export class ZenScriptLinker extends DefaultLinker {
       }
       if (isBroken) {
         // Previous is broken; we don't need more errors here
-        return createSyntheticAstNodeDescription(info.reference.$refText, { $type: 'Unknown' })
+        return createSyntheticDescription(info.reference.$refText, SyntheticUnknown)
       }
     }
 
     return this.createLinkingError(info)
+  }
+
+  private redirectIfNeeded(symbol: AstNodeDescription): AstNodeDescription {
+    const node = symbol?.node
+    if (isImportDeclaration(node)) {
+      const entity = node.item?.entity?.ref as AstNode | SyntheticAstNode
+      // do not redirect aliased or unknown imports
+      const shouldRedirect = !node.alias && !(isSyntheticAstNode(entity) && entity.content === SyntheticUnknown)
+      if (shouldRedirect) {
+        const newSymbol = node.item.entity.$nodeDescription
+        return newSymbol ?? symbol
+      }
+    }
+    return symbol
   }
 
   override getCandidates(refInfo: ReferenceInfo): AstNodeDescription[] | LinkingError {

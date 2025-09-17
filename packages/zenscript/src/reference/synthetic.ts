@@ -8,10 +8,12 @@ export interface ZenScriptSyntheticAstType {
 
 export interface SyntheticAstNode extends AstNode {
   $type: 'SyntheticAstNode'
-  content: SyntheticAstNodeContent
+  content: SyntheticContent
 }
 
-export type SyntheticAstNodeContent = NamespaceNode<AstNode> | { $type: 'Unknown' }
+export type SyntheticContent = NamespaceNode<AstNode> | typeof SyntheticUnknown
+
+export const SyntheticUnknown = Symbol('SyntheticUnknown')
 
 /**
  * Wrap a given content as an AstNode.
@@ -20,7 +22,7 @@ export type SyntheticAstNodeContent = NamespaceNode<AstNode> | { $type: 'Unknown
  * @param content The content to wrap
  * @returns The wrapped content as an AstNode.
  */
-export function createSyntheticAstNode(content: SyntheticAstNodeContent): SyntheticAstNode {
+export function createSyntheticAstNode(content: SyntheticContent): SyntheticAstNode {
   return {
     $type: 'SyntheticAstNode',
     content,
@@ -35,7 +37,7 @@ export function createSyntheticAstNode(content: SyntheticAstNodeContent): Synthe
  * @param content The content to wrap
  * @returns The wrapped content as an AstNodeDescription.
  */
-export function createSyntheticAstNodeDescription(name: string, content: SyntheticAstNodeContent): AstNodeDescription {
+export function createSyntheticDescription(name: string, content: SyntheticContent): AstNodeDescription {
   return {
     name,
     type: 'SyntheticAstNode',

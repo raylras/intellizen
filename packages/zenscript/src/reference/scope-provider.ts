@@ -10,7 +10,7 @@ import * as ast from '../generated/ast'
 import { getSubstType, isArrayType, isClassType, isFunctionType, isListType } from '../typing/type-description'
 import { getDirectChildOf } from '../utils/ast'
 import { defineRules } from '../utils/rule'
-import { createSyntheticAstNodeDescription } from './synthetic'
+import { createSyntheticDescription } from './synthetic'
 
 type RuleSpec = ZenScriptAstType
 type RuleMap = { [K in keyof RuleSpec]?: (node: RuleSpec[K], info: ReferenceInfo, provider: ZenScriptScopeProvider) => Generator<AstNodeDescription> }
@@ -80,7 +80,10 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
         const documentSymbols = AstUtils.getDocument(node).localSymbols
         if (documentSymbols) {
           const classes = node.classes
-          const imports = node.imports.filter(it => ast.isClassDeclaration(it.item.entity?.ref))
+          const imports = node.imports.filter((it) => {
+            const entity = it.item.entity?.ref
+            return !(ast.isFunctionDeclaration(entity) || ast.isVariableDeclaration(entity))
+          })
           yield* provider.toDescriptions([classes, imports], documentSymbols)
         }
         yield* provider.getBuiltinClasses()
@@ -253,7 +256,7 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
   private getRootPackages(): Stream<AstNodeDescription> {
     return stream(this.packageManager.root.children.values())
       .filter(it => !it.hasData())
-      .map(it => createSyntheticAstNodeDescription(it.name, it))
+      .map(it => createSyntheticDescription(it.name, it))
   }
 
   private getBuiltinClasses(): Stream<AstNodeDescription> {
