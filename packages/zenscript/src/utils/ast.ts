@@ -1,31 +1,27 @@
 import type { AstNode, AstNodeDescription, Stream, URI } from 'langium'
 import type { ClassDeclaration } from '../generated/ast'
-import { AstUtils, isAstNodeDescription } from 'langium'
+import { isAstNodeDescription } from 'langium'
 import * as ast from '../generated/ast'
-import { isZs } from './document'
 import { toStream } from './stream'
 
-export function isToplevel(node: AstNode | undefined): boolean {
+export function isToplevel(node: AstNode): boolean {
   return ast.isScript(node?.$container)
 }
 
-export function isStatic(node: AstNode) {
+export function isStatic(node: AstNode): boolean {
   return node && 'variance' in node && node.variance === 'static'
 }
 
-export function isGlobal(node: AstNode) {
+export function isGlobal(node: AstNode): boolean {
   return node && 'variance' in node && node.variance === 'global'
 }
 
-export function isReadonly(node: AstNode) {
+export function isReadonly(node: AstNode): boolean {
   return node && 'variance' in node && typeof node.variance === 'string' && /val|static|global/.test(node.variance)
 }
 
-export function isExposed(node: AstNode | undefined) {
-  if (ast.isScript(node)) {
-    return isZs(AstUtils.getDocument(node))
-  }
-  else if (isToplevel(node)) {
+export function isExposed(node: AstNode): boolean {
+  if (isToplevel(node)) {
     if (ast.isFunctionDeclaration(node)) {
       return node.variance === undefined
     }
@@ -39,6 +35,7 @@ export function isExposed(node: AstNode | undefined) {
   else if (ast.isClassMemberDeclaration(node)) {
     return 'variance' in node && node.variance === 'static'
   }
+  return false
 }
 
 export function getDocumentUri(node: AstNode | undefined): URI | undefined {

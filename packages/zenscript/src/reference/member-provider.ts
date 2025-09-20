@@ -35,9 +35,10 @@ export class ZenScriptMemberProvider implements MemberProvider {
   }
 
   private readonly memberRules = defineRules<RuleMap>({
-    SyntheticAstNode: (element) => {
-      if (isNamespaceNode(element.content)) {
-        return stream(element.content.children.values()).flatMap(it => it.hasData() ? it.data : createSyntheticAstNode(it))
+    SyntheticAstNode: ({ content }) => {
+      if (isNamespaceNode(content)) {
+        return stream(content.children.values())
+          .flatMap(it => it.hasData() ? it.data : createSyntheticAstNode(it))
       }
     },
 

@@ -21,7 +21,7 @@ export class ZenScriptPackageManager implements PackageManager {
 
     // insert data once document is indexed content
     services.shared.workspace.DocumentBuilder.onDocumentPhase(DocumentState.IndexedContent, (document) => {
-      this.insert(document)
+      this.processExposedNodes(document, node => this.insertNode(node))
     })
 
     // remove data once document is changed or deleted
@@ -29,7 +29,9 @@ export class ZenScriptPackageManager implements PackageManager {
       stream(changed, deleted)
         .map(it => services.shared.workspace.LangiumDocuments.getDocument(it))
         .nonNullable()
-        .forEach(it => this.remove(it))
+        .forEach((document) => {
+          this.processExposedNodes(document, node => this.removeNode(node))
+        })
     })
   }
 
@@ -45,17 +47,14 @@ export class ZenScriptPackageManager implements PackageManager {
     return this.packages.root
   }
 
-  private insert(document: LangiumDocument) {
+  private processExposedNodes(document: LangiumDocument, processor: (node: AstNode) => void) {
     const root = document.parseResult.value
-    if (isExposed(root)) {
-      this.insertNode(root)
-    }
-    const exposedToplevels = AstUtils.streamContents(root).filter(isExposed)
-    for (const toplevel of exposedToplevels) {
-      this.insertNode(toplevel)
+    const toplevels = AstUtils.streamContents(root).filter(isExposed)
+    for (const toplevel of toplevels) {
+      processor(toplevel)
       if (isClassDeclaration(toplevel)) {
-        for (const staticMember of toplevel.members.filter(isStatic)) {
-          this.insertNode(staticMember)
+        for (const member of toplevel.members.filter(isStatic)) {
+          processor(member)
         }
       }
     }
@@ -65,22 +64,6 @@ export class ZenScriptPackageManager implements PackageManager {
     const name = this.nameProvider.getQualifiedName(node)
     if (name) {
       this.packages.insert(name, node)
-    }
-  }
-
-  private remove(document: LangiumDocument) {
-    const root = document.parseResult.value
-    if (isExposed(root)) {
-      this.removeNode(root)
-    }
-    const exposedToplevels = AstUtils.streamContents(root).filter(isExposed)
-    for (const toplevel of exposedToplevels) {
-      this.removeNode(toplevel)
-      if (isClassDeclaration(toplevel)) {
-        for (const staticMember of toplevel.members.filter(isStatic)) {
-          this.removeNode(staticMember)
-        }
-      }
     }
   }
 

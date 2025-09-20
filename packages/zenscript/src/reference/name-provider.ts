@@ -2,8 +2,8 @@ import type { AstNode, CstNode } from 'langium'
 import type { Script, ZenScriptAstType } from '../generated/ast'
 import type { ZenScriptSyntheticAstType } from './synthetic'
 import { AstUtils, DefaultNameProvider, GrammarUtils } from 'langium'
-import { isClassDeclaration, isScript } from '../generated/ast'
-import { isExposed, isStatic, isToplevel } from '../utils/ast'
+import { isClassDeclaration } from '../generated/ast'
+import { isExposed, isToplevel } from '../utils/ast'
 import { getName, getQualifiedName } from '../utils/document'
 import { isNamespaceNode } from '../utils/namespace-tree'
 import { defineRules } from '../utils/rule'
@@ -27,19 +27,20 @@ export class ZenScriptNameProvider extends DefaultNameProvider {
   }
 
   getQualifiedName(node: AstNode): string | undefined {
+    if (!isExposed(node)) {
+      return
+    }
+
     const document = AstUtils.getDocument<Script>(node)
     if (!document) {
       return
     }
 
-    if (isScript(node)) {
-      return getQualifiedName(document)
-    }
-    else if (isToplevel(node) && isExposed(node)) {
+    if (isToplevel(node)) {
       return concat(getQualifiedName(document), this.getName(node))
     }
-    else if (isClassDeclaration(node.$container) && isStatic(node)) {
-      return concat(this.getQualifiedName(node.$container!), this.getName(node))
+    else if (isClassDeclaration(node.$container)) {
+      return concat(this.getQualifiedName(node.$container), this.getName(node))
     }
   }
 
