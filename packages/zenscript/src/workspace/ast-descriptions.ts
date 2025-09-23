@@ -5,6 +5,7 @@ import { getDocumentUri } from '../utils/ast'
 
 declare module 'langium' {
   interface AstNodeDescriptionProvider {
+    getDescription: (node: AstNode) => AstNodeDescription | undefined
     getOrCreateDescription: (node: AstNode, name: string, uri?: URI,) => AstNodeDescription
   }
 }
@@ -18,6 +19,10 @@ export class ZenScriptAstNodeDescriptionProvider implements AstNodeDescriptionPr
     this.astNodeLocator = services.workspace.AstNodeLocator
     this.nameProvider = services.references.NameProvider
     this.cache = new WeakMap()
+  }
+
+  getDescription(node: AstNode): AstNodeDescription | undefined {
+    return this.cache.get(node)
   }
 
   getOrCreateDescription(node: AstNode, name: string, uri?: URI): AstNodeDescription {

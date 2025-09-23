@@ -1,29 +1,32 @@
 import type { AstNode } from 'langium'
 import type { ZenScriptServices } from '../module'
-import type { TypeComputer } from './type-computer'
-import type { FunctionType, Type } from './type-description'
-import type { TypeFeatures } from './type-features'
+import type { TypeComputer } from '../typing/type-computer'
+import type { FunctionType, Type } from '../typing/type-description'
+import type { TypeFeatures } from '../typing/type-features'
 import { MultiMap } from 'langium'
 import * as ast from '../generated/ast'
-import { isFunctionType } from './type-description'
+import { getSubstType, isArrayType, isFunctionType } from '../typing/type-description'
 
 const ENABLE_OVERLOAD_LOGGING = false
 export interface OverloadResolver {
-  resolveOverloads: (callExpr: ast.CallExpression, maybeCandidates: AstNode[]) => AstNode[]
+  resolveOverloads: (expr: ast.AccessExpression, maybeCandidates: AstNode[]) => AstNode[]
 }
 
 export enum OverloadMatch {
-  ExactMatch,
-  VarargMatch,
-  OptionalArgMatch,
-  SubtypeMatch,
-  ImplicitCastMatch,
-  FunctionPropertyMatch,
-  NotMatch,
+  Exact,
+  EqualType,
+  Vararg,
+  OptionalArg,
+  SubType,
+  ImplicitCastType,
+  CallableProperty,
+  MissingArgs,
+  TooManyArgs,
+  Mismatch,
 }
 
 function worstMatch(matchSet: Set<OverloadMatch>): OverloadMatch {
-  return Array.from(matchSet).sort((a, b) => a - b).at(-1) ?? OverloadMatch.NotMatch
+  return Array.from(matchSet).sort().at(-1) ?? OverloadMatch.Mismatch
 }
 
 export class ZenScriptOverloadResolver implements OverloadResolver {
@@ -35,23 +38,23 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
     this.typeFeatures = services.typing.TypeFeatures
   }
 
-  public resolveOverloads(callExpr: ast.CallExpression, maybeCandidates: AstNode[]): AstNode[] {
+  public resolveOverloads(expr: ast.AccessExpression, maybeCandidates: AstNode[]): AstNode[] {
     const candidates = maybeCandidates.flatMap(maybe => ast.isClassDeclaration(maybe) ? maybe.members.filter(ast.isConstructorDeclaration) : maybe)
     if (candidates.length <= 1) {
       return candidates
     }
 
-    const groupedCandidates = candidates.reduce((map, it) => map.add(it.$container!, it), new MultiMap<AstNode, AstNode>())
-    for (const container of groupedCandidates.keys()) {
-      const overloads = this.analyzeOverloads(new Set(groupedCandidates.get(container)), callExpr.args)
+    const grouped = candidates.reduce((map, it) => map.add(it.$container!, it), new MultiMap<AstNode, AstNode>())
+    for (const container of grouped.keys()) {
+      const overloads = this.analyzeOverloads(new Set(grouped.get(container)), expr.args)
       if (overloads.length) {
         return overloads
       }
-      else if (ENABLE_OVERLOAD_LOGGING) {
-        // FIXME: overloading error
-        // For debugging, consider adding a breakpoint here
-        console.error(`Could not resolve overloads for call expression: ${callExpr.$cstNode?.text}`)
-      }
+    }
+    if (ENABLE_OVERLOAD_LOGGING) {
+      // FIXME
+      // For debugging, consider adding a breakpoint here
+      console.error(`[Debug/Overload] No overloads: ${expr.entity.$refText}`)
     }
 
     return candidates
@@ -60,11 +63,11 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
   private analyzeOverloads(candidates: Set<AstNode>, args: ast.Expression[]): AstNode[] {
     const possibles = candidates.values()
       .map(it => ({ candidate: it, match: this.match(it, args) }))
-      .filter(it => it.match !== OverloadMatch.NotMatch)
+      .filter(it => it.match !== OverloadMatch.Mismatch)
       .toArray()
       .sort((a, b) => a.match - b.match)
-    const groupedPossibles = Object.groupBy(possibles, it => it.match)
-    const bestMatches = Object.values(groupedPossibles).at(0) ?? []
+    const grouped = Object.groupBy(possibles, it => it.match)
+    const bestMatches = Object.values(grouped).at(0) ?? []
 
     if (bestMatches.length > 1) {
       this.logAmbiguous(possibles, args)
@@ -77,26 +80,26 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
     if (!ENABLE_OVERLOAD_LOGGING) {
       return
     }
-    const argTypes = args.map(it => this.typeComputer.inferType(it)?.toString() ?? 'undefined').join(', ')
-    console.warn(`ambiguous overload for (${argTypes})`)
+    const argTypes = args.map(it => this.typeComputer.inferTypeOrUnknown(it).toString()).join(', ')
+    console.warn(`[Debug/Overload] Ambiguous (${argTypes})`)
     for (const { candidate, match } of possibles) {
-      const name = 'name' in candidate ? candidate.name : 'Unnamed'
+      const name = 'name' in candidate ? candidate.name : 'function'
       const funcType = this.typeComputer.inferType(candidate) as FunctionType
       const paramTypes = funcType.params.map(it => it.toString()).join(', ')
       console.warn(`----- ${OverloadMatch[match]} ${name}(${paramTypes})`)
     }
   }
 
-  private match(node: AstNode, args: ast.Expression[]): OverloadMatch {
-    const matchSet = new Set([OverloadMatch.ExactMatch])
-    if (ast.isCallableDeclaration(node)) {
-      this.matchCallable(node, args, matchSet)
+  private match(candidate: AstNode, args: ast.Expression[]): OverloadMatch {
+    const matchSet = new Set([OverloadMatch.Exact])
+    if (ast.isCallableDeclaration(candidate)) {
+      this.matchCallable(candidate, args, matchSet)
     }
-    else if (ast.isFieldDeclaration(node)) {
-      this.matchFunctionProperty(node, args, matchSet)
+    else if (ast.isFieldDeclaration(candidate)) {
+      this.matchFunctionProperty(candidate, args, matchSet)
     }
     else {
-      matchSet.add(OverloadMatch.NotMatch)
+      matchSet.add(OverloadMatch.Mismatch)
     }
     return worstMatch(matchSet)
   }
@@ -106,28 +109,27 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
     const map = this.createParamToArgsMap(params, args)
 
     if (args.length > map.size) {
-      matchSet.add(OverloadMatch.NotMatch)
-      return
+      matchSet.add(OverloadMatch.TooManyArgs)
     }
 
     for (const param of params) {
       const arg = map.get(param).at(0)
       // special checking
       if (param.varargs) {
-        matchSet.add(OverloadMatch.VarargMatch)
+        matchSet.add(OverloadMatch.Vararg)
         if (!arg) {
           continue
         }
       }
       else if (param.defaultValue) {
-        matchSet.add(OverloadMatch.OptionalArgMatch)
+        matchSet.add(OverloadMatch.OptionalArg)
         if (!arg) {
           continue
         }
       }
       else {
         if (!arg) {
-          matchSet.add(OverloadMatch.NotMatch)
+          matchSet.add(OverloadMatch.MissingArgs)
           break
         }
       }
@@ -136,7 +138,10 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
       const paramType = this.typeComputer.inferType(param)
       const argType = this.typeComputer.inferType(arg)
       if (!paramType || !argType) {
-        matchSet.add(OverloadMatch.ImplicitCastMatch)
+        matchSet.add(OverloadMatch.ImplicitCastType)
+      }
+      else if (param.varargs && isArrayType(argType)) {
+        this.matchType(paramType, getSubstType(argType, 'T')!, matchSet)
       }
       else {
         this.matchType(paramType, argType, matchSet)
@@ -159,23 +164,23 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
   }
 
   private matchFunctionProperty(property: ast.FieldDeclaration, args: ast.Expression[], matchSet: Set<OverloadMatch>) {
-    matchSet.add(OverloadMatch.FunctionPropertyMatch)
+    matchSet.add(OverloadMatch.CallableProperty)
 
     const funcType = this.typeComputer.inferType(property)
     if (!isFunctionType(funcType)) {
-      matchSet.add(OverloadMatch.NotMatch)
+      matchSet.add(OverloadMatch.Mismatch)
       return
     }
 
     if (funcType.params.length !== args.length) {
-      matchSet.add(OverloadMatch.NotMatch)
+      matchSet.add(OverloadMatch.Mismatch)
       return
     }
 
     funcType.params.forEach((paramType, index) => {
       const argType = this.typeComputer.inferType(args[index])
       if (!argType) {
-        matchSet.add(OverloadMatch.ImplicitCastMatch)
+        matchSet.add(OverloadMatch.ImplicitCastType)
       }
       else {
         this.matchType(paramType, argType, matchSet)
@@ -185,16 +190,16 @@ export class ZenScriptOverloadResolver implements OverloadResolver {
 
   private matchType(paramType: Type, argType: Type, matchSet: Set<OverloadMatch>) {
     if (this.typeFeatures.areTypesEqual(paramType, argType)) {
-      matchSet.add(OverloadMatch.ExactMatch)
+      matchSet.add(OverloadMatch.EqualType)
     }
     else if (this.typeFeatures.isSubType(argType, paramType)) {
-      matchSet.add(OverloadMatch.SubtypeMatch)
+      matchSet.add(OverloadMatch.SubType)
     }
     else if (this.typeFeatures.isConvertible(argType, paramType)) {
-      matchSet.add(OverloadMatch.ImplicitCastMatch)
+      matchSet.add(OverloadMatch.ImplicitCastType)
     }
     else {
-      matchSet.add(OverloadMatch.NotMatch)
+      matchSet.add(OverloadMatch.Mismatch)
     }
   }
 }

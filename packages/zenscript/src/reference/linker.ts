@@ -1,21 +1,43 @@
-import type { AstNode, AstNodeDescription, LinkingError, ReferenceInfo } from 'langium'
+import type { AstNode, AstNodeDescription, AstNodeDescriptionProvider, LinkingError, ReferenceInfo } from 'langium'
 import type { ImportItem, NamedTypeItem } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
+import type { OverloadResolver } from './overload-resolver'
 import type { SyntheticAstNode } from './synthetic'
 import { DefaultLinker } from 'langium'
-import { isImportDeclaration, isImportItem, isNamedTypeItem } from '../generated/ast'
+import { isAccessExpression, isFieldDeclaration, isImportDeclaration, isImportItem, isNamedTypeItem } from '../generated/ast'
 import { createSyntheticDescription, isSyntheticAstNode, SyntheticUnknown } from './synthetic'
 
 export class ZenScriptLinker extends DefaultLinker {
+  private readonly overloadResolver: OverloadResolver
+  private readonly descriptions: AstNodeDescriptionProvider
+
   constructor(services: ZenScriptServices) {
     super(services)
+    this.overloadResolver = services.references.OverloadResolver
+    this.descriptions = services.workspace.AstNodeDescriptionProvider
   }
 
   override getCandidate(info: ReferenceInfo): AstNodeDescription | LinkingError {
     const scope = this.scopeProvider.getScope(info)
-    const description = scope.getElement(info.reference.$refText)
-    if (description) {
-      return this.redirectIfNeeded(description)
+
+    if (isAccessExpression(info.container)) {
+      const symbols = scope.getElements(info.reference.$refText).toArray()
+      if (symbols.length) {
+        if (info.container.withArgs) {
+          const overloads = this.overloadResolver.resolveOverloads(info.container, symbols.map(it => it.node!))
+          const symbol = this.descriptions.getDescription(overloads[0])
+          return symbol ?? symbols[0]
+        }
+        else {
+          const field = symbols.find(it => isFieldDeclaration(it.node))
+          return field ?? symbols[0]
+        }
+      }
+    }
+
+    const symbol = scope.getElement(info.reference.$refText)
+    if (symbol) {
+      return this.redirectImportIfNeeded(symbol)
     }
 
     // Prevent creating a bunch of errors for broken references
@@ -38,7 +60,7 @@ export class ZenScriptLinker extends DefaultLinker {
     return this.createLinkingError(info)
   }
 
-  private redirectIfNeeded(symbol: AstNodeDescription): AstNodeDescription {
+  private redirectImportIfNeeded(symbol: AstNodeDescription): AstNodeDescription {
     const node = symbol?.node
     if (isImportDeclaration(node)) {
       const entity = node.item?.entity?.ref as AstNode | SyntheticAstNode

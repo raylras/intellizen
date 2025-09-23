@@ -12,9 +12,9 @@ import { ZenScriptSemanticTokenProvider } from './lsp/semantic-token-provider'
 import { ZenScriptLinker } from './reference/linker'
 import { ZenScriptMemberProvider } from './reference/member-provider'
 import { ZenScriptNameProvider } from './reference/name-provider'
+import { ZenScriptOverloadResolver } from './reference/overload-resolver'
 import { ZenScriptScopeComputation } from './reference/scope-computation'
 import { ZenScriptScopeProvider } from './reference/scope-provider'
-import { ZenScriptOverloadResolver } from './typing/overload-resolver'
 import { ZenScriptTypeComputer } from './typing/type-computer'
 import { ZenScriptTypeFeatures } from './typing/type-features'
 import { registerValidationChecks, ZenScriptValidator } from './validation/validator'
@@ -35,11 +35,11 @@ export interface ZenScriptAddedServices {
   references: {
     MemberProvider: ZenScriptMemberProvider
     PackageManager: ZenScriptPackageManager
+    OverloadResolver: ZenScriptOverloadResolver
   }
   typing: {
     TypeComputer: ZenScriptTypeComputer
     TypeFeatures: ZenScriptTypeFeatures
-    OverloadResolver: ZenScriptOverloadResolver
   }
 }
 
@@ -75,6 +75,7 @@ export const ZenScriptModule: Module<ZenScriptServices, PartialLangiumServices &
     MemberProvider: services => new ZenScriptMemberProvider(services),
     PackageManager: services => new ZenScriptPackageManager(services),
     Linker: services => new ZenScriptLinker(services),
+    OverloadResolver: services => new ZenScriptOverloadResolver(services),
   },
   workspace: {
     AstNodeDescriptionProvider: services => new ZenScriptAstNodeDescriptionProvider(services),
@@ -86,7 +87,6 @@ export const ZenScriptModule: Module<ZenScriptServices, PartialLangiumServices &
   typing: {
     TypeComputer: services => new ZenScriptTypeComputer(services),
     TypeFeatures: services => new ZenScriptTypeFeatures(services),
-    OverloadResolver: services => new ZenScriptOverloadResolver(services),
   },
   lsp: {
     CompletionProvider: services => new ZenScriptCompletionProvider(services),

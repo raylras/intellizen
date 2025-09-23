@@ -5,7 +5,7 @@ import type { Type, ZenScriptType } from './type-description'
 import { isOperatorFunctionDeclaration } from '../generated/ast'
 import { streamClassChain } from '../utils/ast'
 import { defineRules } from '../utils/rule'
-import { isAnyType, isClassType, isCompoundType, isFunctionType, isIntersectionType, isTypeVariable, isUnionType } from './type-description'
+import { isAnyType, isClassType, isCompoundType, isFunctionType, isIntersectionType, isTypeVariable, isUnionType, isUnknownType } from './type-description'
 
 export interface TypeAssignability {
   // target := source
@@ -143,8 +143,10 @@ export class ZenScriptTypeFeatures implements TypeFeatures {
   }
 
   private readonly typeConversionRules = defineRules<RuleMap>({
+    UnknownType: () => true,
+
     ClassType: (from, to) => {
-      if (isAnyType(from) || isAnyType(to)) {
+      if (isAnyType(from) || isAnyType(to) || isUnknownType(to)) {
         return true
       }
 
@@ -157,17 +159,23 @@ export class ZenScriptTypeFeatures implements TypeFeatures {
     },
 
     FunctionType: (from, to) => {
-      if (isAnyType(to)) {
+      if (isAnyType(to) || isUnknownType(to)) {
         return true
       }
 
-      if (!isFunctionType(to)) {
+      let func: Type | undefined = to
+      if (isClassType(to)) {
+        const lam = this.memberProvider.getLambda(to)
+        func = this.typeComputer.inferType(lam)
+      }
+
+      if (!isFunctionType(func)) {
         return false
       }
 
-      return from.params.length === to.params.length
-        && this.isConvertible(from.ret, to.ret)
-        && from.params.every((param, index) => this.isConvertible(param, to.params[index]))
+      return from.params.length === func.params.length
+        && this.isConvertible(from.ret, func.ret)
+        && from.params.every((param, index) => this.isConvertible(param, func.params[index]))
     },
 
     CompoundType: (from, to) => {

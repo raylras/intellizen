@@ -70,7 +70,7 @@ export class ZenScriptPackageManager implements PackageManager {
   private removeNode(node: AstNode) {
     const name = this.nameProvider.getQualifiedName(node)
     if (name) {
-      this.packages.findNode(name)?.free()
+      this.packages.findNode(name)?.delete(node)
     }
   }
 }

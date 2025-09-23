@@ -60,7 +60,7 @@ export class ClassType implements NamedType<ClassDeclaration> {
     return new ClassType(this.name, this.decl, newSubst)
   }
 
-  addSubst(name: string, type: () => Type | undefined): void {
+  addSubst(name: string, type: () => Type): void {
     if (!this.subst) {
       this.subst = makeSubst()
     }

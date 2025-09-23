@@ -1,11 +1,11 @@
-import type { AstNode, AstNodeDescription, LocalSymbols, ReferenceInfo, Scope, Stream } from 'langium'
+import type { AstNode, AstNodeDescription, DefaultReference, LocalSymbols, Reference, ReferenceInfo, Scope, Stream } from 'langium'
 import type { ZenScriptAstType } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
 import type { TypeComputer } from '../typing/type-computer'
 import type { Type } from '../typing/type-description'
 import type { PackageManager } from '../workspace/package-manager'
 import type { MemberProvider } from './member-provider'
-import { AstUtils, DefaultScopeProvider, EMPTY_SCOPE, EMPTY_STREAM, stream, StreamScope } from 'langium'
+import { AstUtils, DefaultScopeProvider, EMPTY_STREAM, RefResolving, stream } from 'langium'
 import * as ast from '../generated/ast'
 import { getSubstType, isArrayType, isClassType, isFunctionType, isListType } from '../typing/type-description'
 import { getDirectChildOf } from '../utils/ast'
@@ -14,6 +14,29 @@ import { createSyntheticDescription } from './synthetic'
 
 type RuleSpec = ZenScriptAstType
 type RuleMap = { [K in keyof RuleSpec]?: (node: RuleSpec[K], info: ReferenceInfo, provider: ZenScriptScopeProvider) => Generator<AstNodeDescription> }
+
+function createSymbolScope(generator: () => Generator<AstNodeDescription> | undefined): Scope {
+  return {
+    getElement(name: string): AstNodeDescription | undefined {
+      return generator()?.find(it => it.name === name)
+    },
+
+    getElements(name: string): Stream<AstNodeDescription> {
+      const it = generator()?.filter(it => it.name === name)
+      return it ? stream(it) : EMPTY_STREAM
+    },
+
+    getAllElements(): Stream<AstNodeDescription> {
+      const it = generator()
+      return it ? stream(it) : EMPTY_STREAM
+    },
+  }
+}
+
+export function isResolvingReference(reference: Reference): boolean {
+  const _ref = (reference as DefaultReference)._ref
+  return _ref === RefResolving
+}
 
 export class ZenScriptScopeProvider extends DefaultScopeProvider {
   private readonly packageManager: PackageManager
@@ -28,11 +51,10 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
   }
 
   override getScope(info: ReferenceInfo): Scope {
-    const symbols = this.getSymbols(info.container, info)
-    return symbols ? new StreamScope(stream(symbols)) : EMPTY_SCOPE
+    return createSymbolScope(() => this.getSymbols(info.container, info))
   }
 
-  private getSymbols(node: AstNode, info: ReferenceInfo): Iterable<AstNodeDescription> | undefined {
+  private getSymbols(node: AstNode, info: ReferenceInfo): Generator<AstNodeDescription> | undefined {
     return this.symbolRules(node.$type)?.call(this, node, info, this)
   }
 
@@ -186,9 +208,11 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
       else if (ast.isReferenceExpression(info.container)) {
         const child = getDirectChildOf(node, info.container)
         if (child.$containerProperty === ast.AccessExpression.args) {
-          const type = provider.getParamType(child.$containerIndex!, node.entity?.ref)
-          if (type) {
-            yield* provider.getTypeStaticSymbols(type)
+          if (!isResolvingReference(node.entity)) {
+            const type = provider.getParamType(child.$containerIndex!, node.entity?.ref)
+            if (type) {
+              yield* provider.getTypeStaticSymbols(type)
+            }
           }
         }
       }

@@ -13,6 +13,8 @@ import { createSyntheticAstNode } from './synthetic'
 
 export interface MemberProvider {
   streamMembers: (element: AstNode | Type | undefined) => Stream<AstNode>
+  getLambda: (element: AstNode | Type | undefined) => ast.FunctionDeclaration | undefined
+  getOperator: (element: AstNode | Type | undefined, operator: string, length: number) => ast.OperatorFunctionDeclaration | undefined
 }
 
 type RuleSpec = ast.ZenScriptAstType & ZenScriptType & ZenScriptSyntheticAstType
@@ -25,8 +27,23 @@ export class ZenScriptMemberProvider implements MemberProvider {
     this.typeComputer = services.typing.TypeComputer
   }
 
-  public streamMembers(element: AstNode | Type | undefined): Stream<AstNode> {
+  streamMembers(element: AstNode | Type | undefined): Stream<AstNode> {
     return this.memberRules(element?.$type)?.call(this, element) ?? EMPTY_STREAM
+  }
+
+  getLambda(element: AstNode | Type | undefined) {
+    return this.streamMembers(element)
+      .filter(ast.isFunctionDeclaration)
+      .filter(it => it.variance === 'lambda')
+      .head()
+  }
+
+  getOperator(type: AstNode | Type | undefined, operator: string, length: number) {
+    return this.streamMembers(type)
+      .filter(ast.isOperatorFunctionDeclaration)
+      .filter(it => it.operator === operator)
+      .filter(it => it.params.length === length)
+      .head()
   }
 
   private streamTypeMembers(element: AstNode): Stream<AstNode> {
