@@ -8,7 +8,7 @@ import type { MemberProvider } from './member-provider'
 import { AstUtils, DefaultScopeProvider, EMPTY_STREAM, RefResolving, stream } from 'langium'
 import * as ast from '../generated/ast'
 import { getSubstType, isArrayType, isClassType, isFunctionType, isListType } from '../typing/type-description'
-import { getDirectChildOf } from '../utils/ast'
+import { getDirectChildOf, isGlobal } from '../utils/ast'
 import { defineRules } from '../utils/rule'
 import { createSyntheticDescription } from './synthetic'
 
@@ -128,6 +128,23 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
       }
     },
 
+    * ExpandFunctionDeclaration(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.FunctionDeclaration.body) {
+          const syntheticThis = provider.descriptions.createDescription(node.type, 'this')
+          yield syntheticThis
+
+          const documentSymbols = AstUtils.getDocument(node).localSymbols
+          if (documentSymbols) {
+            const locals = provider.getLocals(node, node.body, info)
+            const params = node.params.toReversed()
+            yield* provider.toDescriptions([locals, params], documentSymbols)
+          }
+        }
+      }
+    },
+
     * ClassDeclaration(node, info, provider) {
       if (ast.isReferenceExpression(info.container)) {
         const syntheticThis = provider.descriptions.createDescription(node, 'this')
@@ -189,7 +206,7 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
 
     * AccessExpression(node, info, provider) {
       if (node === info.container) {
-        const members = provider.memberProvider.streamMembers(node.receiver)
+        const members = provider.memberProvider.getMembers(node.receiver)
         let overload: ast.OperatorFunctionDeclaration | undefined
         for (const it of members) {
           if (ast.isOperatorFunctionDeclaration(it) && it.operator === '.' && it.params.length === 1) {
@@ -293,11 +310,11 @@ export class ZenScriptScopeProvider extends DefaultScopeProvider {
   }
 
   private getGlobals(): Stream<AstNodeDescription> {
-    return this.indexManager.allElements()
+    return this.indexManager.allElements().filter(it => isGlobal(it.node))
   }
 
   private getMembers(node: AstNode): Stream<AstNodeDescription> {
-    return this.memberProvider.streamMembers(node)
+    return this.memberProvider.getMembers(node)
       .map(it => this.tryMapToDescription(it))
       .nonNullable()
   }

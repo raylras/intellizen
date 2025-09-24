@@ -1,23 +1,23 @@
 import type { AstNode, AstNodeDescription, Stream, URI } from 'langium'
 import type { ClassDeclaration } from '../generated/ast'
-import { isAstNodeDescription } from 'langium'
+import { isAstNode, isAstNodeDescription } from 'langium'
 import * as ast from '../generated/ast'
 import { toStream } from './stream'
 
-export function isToplevel(node: AstNode): boolean {
-  return ast.isScript(node?.$container)
+export function isToplevel(node: AstNode | undefined): boolean {
+  return isAstNode(node) && ast.isScript(node?.$container)
 }
 
-export function isStatic(node: AstNode): boolean {
-  return node && 'variance' in node && node.variance === 'static'
+export function isStatic(node: AstNode | undefined): boolean {
+  return isAstNode(node) && 'variance' in node && node.variance === 'static'
 }
 
-export function isGlobal(node: AstNode): boolean {
-  return node && 'variance' in node && node.variance === 'global'
+export function isGlobal(node: AstNode | undefined): boolean {
+  return isAstNode(node) && 'variance' in node && node.variance === 'global'
 }
 
-export function isReadonly(node: AstNode): boolean {
-  return node && 'variance' in node && typeof node.variance === 'string' && /val|static|global/.test(node.variance)
+export function isReadonly(node: AstNode | undefined): boolean {
+  return isAstNode(node) && 'variance' in node && typeof node.variance === 'string' && /val|static|global/.test(node.variance)
 }
 
 export function isExposed(node: AstNode): boolean {

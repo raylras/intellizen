@@ -2,6 +2,7 @@ import type { AstNode, AstNodeDescription, LangiumDocument, MultiMap } from 'lan
 import type { Script } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
 import { DefaultScopeComputation } from 'langium'
+import { isExpandDeclaration, isExpandFunctionDeclaration } from '../generated/ast'
 import { isGlobal } from '../utils/ast'
 
 export class ZenScriptScopeComputation extends DefaultScopeComputation {
@@ -15,6 +16,12 @@ export class ZenScriptScopeComputation extends DefaultScopeComputation {
       if (name) {
         exports.push(this.descriptions.getOrCreateDescription(node, name, document.uri))
       }
+    }
+    else if (isExpandFunctionDeclaration(node) && node.name) {
+      exports.push(this.descriptions.getOrCreateDescription(node, node.name, document.uri))
+    }
+    else if (isExpandDeclaration(node) && node.type) {
+      exports.push(this.descriptions.getOrCreateDescription(node, node.type.$cstNode?.text ?? '', document.uri))
     }
   }
 

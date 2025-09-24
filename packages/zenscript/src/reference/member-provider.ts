@@ -1,7 +1,8 @@
-import type { AstNode, Stream } from 'langium'
+import type { AstNode, IndexManager, Stream } from 'langium'
 import type { ZenScriptServices } from '../module'
 import type { TypeComputer } from '../typing/type-computer'
 import type { Type, ZenScriptType } from '../typing/type-description'
+import type { TypeFeatures } from '../typing/type-features'
 import type { ZenScriptSyntheticAstType } from './synthetic'
 import { EMPTY_STREAM, stream } from 'langium'
 import * as ast from '../generated/ast'
@@ -12,7 +13,7 @@ import { defineRules } from '../utils/rule'
 import { createSyntheticAstNode } from './synthetic'
 
 export interface MemberProvider {
-  streamMembers: (element: AstNode | Type | undefined) => Stream<AstNode>
+  getMembers: (element: AstNode | Type | undefined) => Stream<AstNode>
   getLambda: (element: AstNode | Type | undefined) => ast.FunctionDeclaration | undefined
   getOperator: (element: AstNode | Type | undefined, operator: string, length: number) => ast.OperatorFunctionDeclaration | undefined
 }
@@ -21,34 +22,59 @@ type RuleSpec = ast.ZenScriptAstType & ZenScriptType & ZenScriptSyntheticAstType
 type RuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => Stream<AstNode> | undefined }
 
 export class ZenScriptMemberProvider implements MemberProvider {
-  private readonly typeComputer: TypeComputer
+  private readonly typeComputer: () => TypeComputer
+  private readonly typeFeatures: () => TypeFeatures
+  private readonly indexManager: IndexManager
 
   constructor(services: ZenScriptServices) {
-    this.typeComputer = services.typing.TypeComputer
+    this.typeComputer = () => services.typing.TypeComputer
+    this.typeFeatures = () => services.typing.TypeFeatures
+    this.indexManager = services.shared.workspace.IndexManager
   }
 
-  streamMembers(element: AstNode | Type | undefined): Stream<AstNode> {
+  getMembers(element: AstNode | Type | undefined): Stream<AstNode> {
     return this.memberRules(element?.$type)?.call(this, element) ?? EMPTY_STREAM
   }
 
   getLambda(element: AstNode | Type | undefined) {
-    return this.streamMembers(element)
+    return this.getMembers(element)
       .filter(ast.isFunctionDeclaration)
       .filter(it => it.variance === 'lambda')
       .head()
   }
 
   getOperator(type: AstNode | Type | undefined, operator: string, length: number) {
-    return this.streamMembers(type)
+    return this.getMembers(type)
       .filter(ast.isOperatorFunctionDeclaration)
       .filter(it => it.operator === operator)
       .filter(it => it.params.length === length)
       .head()
   }
 
-  private streamTypeMembers(element: AstNode): Stream<AstNode> {
-    const type = this.typeComputer.inferType(element)
-    return this.streamMembers(type)
+  private getTypeMembers(element: AstNode): Stream<AstNode> {
+    const type = this.typeComputer().inferType(element)
+    return this.getMembers(type).concat(this.getExpandMembers(type))
+  }
+
+  private getExpandMembers(element: Type | undefined): Stream<ast.ExpandMemberDeclaration | ast.ExpandFunctionDeclaration> {
+    if (!element)
+      return EMPTY_STREAM
+
+    return this.indexManager.allElements().flatMap((symbol) => {
+      if (ast.isExpandDeclaration(symbol.node)) {
+        const type = this.typeComputer().inferType(symbol.node.type)
+        if (this.typeFeatures().isSubType(element, type)) {
+          return symbol.node.members
+        }
+      }
+      else if (ast.isExpandFunctionDeclaration(symbol.node)) {
+        const type = this.typeComputer().inferType(symbol.node.type)
+        if (this.typeFeatures().isSubType(element, type)) {
+          return symbol.node
+        }
+      }
+      return EMPTY_STREAM
+    })
   }
 
   private readonly memberRules = defineRules<RuleMap>({
@@ -60,7 +86,7 @@ export class ZenScriptMemberProvider implements MemberProvider {
     },
 
     NamedTypeItem: (element) => {
-      return this.streamMembers(element.entity.ref)
+      return this.getMembers(element.entity.ref)
     },
 
     Script: (element) => {
@@ -72,50 +98,50 @@ export class ZenScriptMemberProvider implements MemberProvider {
     },
 
     ImportDeclaration: (element) => {
-      return this.streamMembers(element.item?.entity?.ref)
+      return this.getMembers(element.item?.entity?.ref)
     },
 
     ImportItem: (element) => {
-      return this.streamMembers(element.entity?.ref)
+      return this.getMembers(element.entity?.ref)
     },
 
     ClassDeclaration: (element) => {
       return stream(element.members).filter(isStatic)
     },
 
-    VariableDeclaration: element => this.streamTypeMembers(element),
+    VariableDeclaration: element => this.getTypeMembers(element),
 
-    LoopParameter: element => this.streamTypeMembers(element),
+    LoopParameter: element => this.getTypeMembers(element),
 
-    ValueParameter: element => this.streamTypeMembers(element),
+    ValueParameter: element => this.getTypeMembers(element),
 
-    ParenthesizedExpression: element => this.streamTypeMembers(element),
+    ParenthesizedExpression: element => this.getTypeMembers(element),
 
-    PrefixExpression: element => this.streamTypeMembers(element),
+    PrefixExpression: element => this.getTypeMembers(element),
 
-    InfixExpression: element => this.streamTypeMembers(element),
+    InfixExpression: element => this.getTypeMembers(element),
 
-    IndexExpression: element => this.streamTypeMembers(element),
+    IndexExpression: element => this.getTypeMembers(element),
 
-    CallExpression: element => this.streamTypeMembers(element),
+    CallExpression: element => this.getTypeMembers(element),
 
-    BracketExpression: element => this.streamTypeMembers(element),
+    BracketExpression: element => this.getTypeMembers(element),
 
-    FieldDeclaration: element => this.streamTypeMembers(element),
+    FieldDeclaration: element => this.getTypeMembers(element),
 
-    StringLiteral: element => this.streamTypeMembers(element),
+    StringLiteral: element => this.getTypeMembers(element),
 
-    StringTemplate: element => this.streamTypeMembers(element),
+    StringTemplate: element => this.getTypeMembers(element),
 
-    IntegerLiteral: element => this.streamTypeMembers(element),
+    IntegerLiteral: element => this.getTypeMembers(element),
 
-    FloatLiteral: element => this.streamTypeMembers(element),
+    FloatLiteral: element => this.getTypeMembers(element),
 
-    BooleanLiteral: element => this.streamTypeMembers(element),
+    BooleanLiteral: element => this.getTypeMembers(element),
 
     AccessExpression: (element) => {
       if (element.withArgs) {
-        return this.streamTypeMembers(element)
+        return this.getTypeMembers(element)
       }
 
       const entity = element.entity?.ref
@@ -123,24 +149,24 @@ export class ZenScriptMemberProvider implements MemberProvider {
         return
       }
 
-      const receiverType = this.typeComputer.inferType(element.receiver)
+      const receiverType = this.typeComputer().inferType(element.receiver)
       if (!receiverType) {
-        return this.streamMembers(entity)
+        return this.getMembers(entity)
       }
 
-      const elementType = this.typeComputer.inferType(element)
+      const elementType = this.typeComputer().inferType(element)
       const substituted = applySubstIfPresent(receiverType, elementType)
-      return this.streamMembers(substituted)
+      return this.getMembers(substituted)
     },
 
     ReferenceExpression: (element) => {
       const entity = element.entity?.ref
       const name = element.entity.$refText
-      if (name === 'this' && ast.isClassDeclaration(entity)) {
-        return this.streamMembers(new ClassType(entity.name, entity))
+      if (name === 'this') {
+        return this.getTypeMembers(element)
       }
       else {
-        return this.streamMembers(entity)
+        return this.getMembers(entity)
       }
     },
 

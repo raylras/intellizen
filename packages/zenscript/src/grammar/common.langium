@@ -1,6 +1,7 @@
 type Entity = Script
     | Declaration
     | MapEntry
+    | Type
 
 interface Script {
     package?: PackageDeclaration

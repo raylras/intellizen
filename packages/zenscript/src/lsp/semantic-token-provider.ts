@@ -6,7 +6,7 @@ import type { ZenScriptSyntheticAstType } from '../reference/synthetic'
 import { stream } from 'langium'
 import { AbstractSemanticTokenProvider } from 'langium/lsp'
 import { SemanticTokenModifiers, SemanticTokenTypes } from 'vscode-languageserver'
-import { isBracketLocation, isOperatorFunctionDeclaration } from '../generated/ast'
+import { isBracketLocation, isClassDeclaration, isExpandFunctionDeclaration, isOperatorFunctionDeclaration } from '../generated/ast'
 import { isReadonly, isStatic } from '../utils/ast'
 import { firstTokenTypeName } from '../utils/cst'
 import { isNamespaceNode } from '../utils/namespace-tree'
@@ -147,14 +147,25 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     },
 
     ReferenceExpression: (element, acceptor) => {
-      const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
-      if (type) {
+      const name = element.entity.$refText
+      const entity = element.entity?.ref
+      if (name === 'this' && (isClassDeclaration(entity) || isExpandFunctionDeclaration(entity?.$container))) {
         acceptor({
           node: element,
           property: 'entity',
-          type,
-          modifier,
+          type: SemanticTokenTypes.variable,
         })
+      }
+      else {
+        const { type, modifier } = this.getSemanticInfo(entity)
+        if (type) {
+          acceptor({
+            node: element,
+            property: 'entity',
+            type,
+            modifier,
+          })
+        }
       }
     },
 
@@ -181,6 +192,15 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     },
 
     FunctionDeclaration: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'name',
+        type: SemanticTokenTypes.function,
+        modifier: SemanticTokenModifiers.declaration,
+      })
+    },
+
+    ExpandFunctionDeclaration: (element, acceptor) => {
       acceptor({
         node: element,
         property: 'name',
@@ -252,6 +272,10 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
     }),
 
     FunctionDeclaration: () => ({
+      type: SemanticTokenTypes.function,
+    }),
+
+    ExpandFunctionDeclaration: () => ({
       type: SemanticTokenTypes.function,
     }),
 

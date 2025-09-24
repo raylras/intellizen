@@ -7,7 +7,7 @@ import { MultiMap } from 'langium'
 import * as ast from '../generated/ast'
 import { getSubstType, isArrayType, isFunctionType } from '../typing/type-description'
 
-const ENABLE_OVERLOAD_LOGGING = false
+const ENABLE_OVERLOAD_LOGGING = true
 export interface OverloadResolver {
   resolveOverloads: (expr: ast.AccessExpression, maybeCandidates: AstNode[]) => AstNode[]
 }

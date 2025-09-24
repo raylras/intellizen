@@ -119,6 +119,12 @@ export class ZenScriptTypeComputer implements TypeComputer {
       return new FunctionType(params, ret)
     },
 
+    ExpandFunctionDeclaration: (element, env) => {
+      const params = element.params.map(it => this.inferTypeOrUnknown(it, env))
+      const ret = element.retType ? this.inferTypeOrUnknown(element.retType, env) : this.getClassType('any')
+      return new FunctionType(params, ret)
+    },
+
     FieldDeclaration: (element, env) => {
       if (element.type) {
         return this.inferTypeOrUnknown(element.type, env)
@@ -322,6 +328,16 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     ReferenceExpression: (element, env) => {
+      const name = element.entity.$refText
+      const entity = element.entity.ref
+      if (name === 'this') {
+        if (ast.isClassDeclaration(entity)) {
+          return new ClassType(name, entity)
+        }
+        else if (ast.isType(entity) && ast.isExpandFunctionDeclaration(entity)) {
+          return this.inferType(entity)
+        }
+      }
       return this.inferType(element.entity?.ref, env)
     },
 

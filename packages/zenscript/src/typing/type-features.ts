@@ -21,7 +21,7 @@ export interface TypeConversion {
 }
 
 export interface SubType {
-  isSubType: (subType: Type, superType: Type) => boolean
+  isSubType: (subType: Type | undefined, superType: Type | undefined) => boolean
 }
 
 export type TypeFeatures = TypeAssignability & TypeEquality & TypeConversion & SubType
@@ -150,7 +150,7 @@ export class ZenScriptTypeFeatures implements TypeFeatures {
         return true
       }
 
-      return this.memberProvider.streamMembers(from)
+      return this.memberProvider.getMembers(from)
         .filter(isOperatorFunctionDeclaration)
         .filter(it => it.operator === 'as')
         .map(it => this.typeComputer.inferType(it.retType))
