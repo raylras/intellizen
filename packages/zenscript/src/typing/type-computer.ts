@@ -187,6 +187,9 @@ export class ZenScriptTypeComputer implements TypeComputer {
         else if (ast.isVariableDeclaration(container2)) {
           expect = this.inferType(container2.type, newEnv)
         }
+        else if (ast.isFieldDeclaration(container2)) {
+          expect = this.inferType(container2.type, newEnv)
+        }
         else if (ast.isCallExpression(container2)) {
           const receiverType = this.inferType(container2.receiver, newEnv)
           expect = isFunctionType(receiverType) ? receiverType.params.at(index2) : undefined
