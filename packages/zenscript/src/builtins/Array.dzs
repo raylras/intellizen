@@ -1,6 +1,14 @@
 zenClass Array<T> {
     val length as int;
 
+    /**
+     * Creates a new array with the given value appended.
+     *
+     * @param value Element to be appended to the new array
+     * @returns New array containing original elements plus the given value
+     */
+    function add(value as T) as Array<T>;
+
     operator has(value as any) as bool;
 
     operator [](index as int) as T;
