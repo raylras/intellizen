@@ -179,7 +179,7 @@ type Expression = AssignmentExpression
 
 interface AssignmentExpression {
     left: Expression
-    operator: '=' | '+=' | '-=' | '~=' | '*=' | '/=' | '%=' | '|=' | '&=' | '^='
+    operator: '=' | '+=' | '-=' | '~=' | '*=' | '/=' | '%=' | '|=' | '&=' | '^=' | '?='
     right: Expression
 }
 
@@ -191,7 +191,7 @@ interface ConditionalExpression {
 
 interface InfixExpression {
     left: Expression
-    operator: '*' | '/' | '%' | '+' | '-' | '~' | '==' | '!=' | '<' | '<=' | '>' | '>=' | 'in' | 'has' | '&' | '|' | '^' | '&&' | '||'
+    operator: '*' | '/' | '%' | '+' | '-' | '~' | '==' | '!=' | '<' | '<=' | '>' | '>=' | 'in' | 'has' | '&' | '|' | '^' | '&&' | '||' | '??'
     right: Expression
 }
 

@@ -238,6 +238,10 @@ export class ZenScriptTypeComputer implements TypeComputer {
             return this.inferType(element.right, env)
           }
         }
+
+        case '?=': {
+          return this.getClassType('void')
+        }
       }
     },
 
@@ -283,6 +287,9 @@ export class ZenScriptTypeComputer implements TypeComputer {
 
         case '~': // String Concat
           return this.getClassType('string')
+
+        case '??': // Nullish Coalescing
+          return this.inferType(element.left, env) ?? this.inferTypeOrUnknown(element.right, env)
       }
     },
 

@@ -113,11 +113,15 @@ ExpressionNoMap returns Expression:
 ;
 
 AssignmentExpressionNoMap returns AssignmentExpression:
-    ConditionalExpressionNoMap ({AssignmentExpression.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^=') right=AssignmentExpression)?
+    ConditionalExpressionNoMap ({AssignmentExpression.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^='|'?=') right=AssignmentExpression)?
 ;
 
 ConditionalExpressionNoMap returns ConditionalExpression:
-    LogicalExpressionNoMap ({ConditionalExpression.condition=current} '?' thenBody=ConditionalExpressionNoMap ':' elseBody=ConditionalExpressionNoMap)?
+    CoalesceExpressionNoMap ({ConditionalExpression.condition=current} '?' thenBody=ConditionalExpressionNoMap ':' elseBody=ConditionalExpressionNoMap)?
+;
+
+CoalesceExpressionNoMap returns InfixExpression:
+    LogicalExpressionNoMap ({InfixExpression.left=current} operator='??' right=LogicalExpressionNoMap)*
 ;
 
 LogicalExpressionNoMap returns InfixExpression:
@@ -156,6 +160,9 @@ infix InfixExpressionNoMap on PrefixExpressionNoMap returns InfixExpression:
 
     // Logical
     > '&&' | '||'
+
+    // Coalescing
+    > '??'
 ;
 */
 
@@ -190,11 +197,15 @@ Expression returns Expression:
 ;
 
 AssignmentExpression returns AssignmentExpression:
-    ConditionalExpression ({AssignmentExpression.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^=') right=AssignmentExpression)?
+    ConditionalExpression ({AssignmentExpression.left=current} operator=('='|'+='|'-='|'~='|'*='|'/='|'%='|'|='|'&='|'^='|'?=') right=AssignmentExpression)?
 ;
 
 ConditionalExpression returns ConditionalExpression:
-    LogicalExpression ({ConditionalExpression.condition=current} '?' thenBody=ConditionalExpression ':' elseBody=ConditionalExpression)?
+    CoalesceExpression ({ConditionalExpression.condition=current} '?' thenBody=ConditionalExpression ':' elseBody=ConditionalExpression)?
+;
+
+CoalesceExpression returns InfixExpression:
+    LogicalExpression ({InfixExpression.left=current} operator='??' right=LogicalExpression)*
 ;
 
 LogicalExpression returns InfixExpression:
@@ -233,6 +244,9 @@ infix InfixExpression on PrefixExpression returns InfixExpression:
 
     // Logical
     > '&&' | '||'
+
+    // Coalescing
+    > '??'
 ;
 */
 
