@@ -74,7 +74,13 @@ export function streamClassChain(decl: ClassDeclaration | undefined): Stream<Cla
       yield head
       visited.add(head)
       head.superTypes
-        .map(it => it.item.entity?.ref)
+        .map((it) => {
+          let entity = it.item.entity?.ref
+          if (ast.isImportDeclaration(entity)) {
+            entity = entity.item?.entity?.ref
+          }
+          return entity
+        })
         .filter(ast.isClassDeclaration)
         .forEach(it => deque.push(it))
     }

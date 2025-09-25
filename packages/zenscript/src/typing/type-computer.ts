@@ -88,12 +88,16 @@ export class ZenScriptTypeComputer implements TypeComputer {
     },
 
     NamedType: (element) => {
-      const entity = element.item.entity?.ref
-      if (ast.isTypeParameter(entity)) {
-        return new TypeVariable(entity)
+      let entity = element.item.entity?.ref
+      if (ast.isImportDeclaration(entity)) {
+        entity = entity.item.entity.ref
       }
-      else if (ast.isClassDeclaration(entity)) {
+
+      if (ast.isClassDeclaration(entity)) {
         return new ClassType(entity.name, entity)
+      }
+      else if (ast.isTypeParameter(entity)) {
+        return new TypeVariable(entity)
       }
     },
 
