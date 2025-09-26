@@ -1,59 +1,84 @@
+import type { AstNode } from 'langium'
 import type { SemanticTokenAcceptor } from 'langium/lsp'
 import type { ZenScriptAstType } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
-import type { TypeComputer } from '../typing/type-computer'
-import { type AstNode, stream } from 'langium'
+import type { ZenScriptSyntheticAstType } from '../reference/synthetic'
+import { stream } from 'langium'
 import { AbstractSemanticTokenProvider } from 'langium/lsp'
 import { SemanticTokenModifiers, SemanticTokenTypes } from 'vscode-languageserver'
-import { isBracketLocation } from '../generated/ast'
-import { isStringType } from '../typing/type-description'
+import { isBracketLocation, isClassDeclaration, isExpandFunctionDeclaration, isOperatorFunctionDeclaration } from '../generated/ast'
+import { isReadonly, isStatic } from '../utils/ast'
 import { firstTokenTypeName } from '../utils/cst'
+import { isNamespaceNode } from '../utils/namespace-tree'
 import { defineRules } from '../utils/rule'
 
-type SourceMap = ZenScriptAstType
-type RuleMap = { [K in keyof SourceMap]?: (source: SourceMap[K], acceptor: SemanticTokenAcceptor) => void }
+type RuleSpec = ZenScriptAstType & ZenScriptSyntheticAstType
+type HighlightRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K], acceptor: SemanticTokenAcceptor) => void }
+type SemanticInfoRuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => SemanticInfo | undefined }
 
-const READONLY_PREFIX = ['global', 'static', 'val']
+interface SemanticInfo {
+  type?: SemanticTokenTypes
+  modifier?: SemanticTokenModifiers | SemanticTokenModifiers[]
+}
 
 export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvider {
-  protected readonly typeComputer: TypeComputer
-
   constructor(services: ZenScriptServices) {
     super(services)
-    this.typeComputer = services.typing.TypeComputer
   }
 
-  override highlightElement(node: AstNode, acceptor: SemanticTokenAcceptor): void {
-    this.rules(node.$type)?.call(this, node, acceptor)
+  override highlightElement(element: AstNode, acceptor: SemanticTokenAcceptor): void {
+    this.highlightRules(element.$type)?.call(this, element, acceptor)
   }
 
-  private readonly rules = defineRules<RuleMap>({
-    IntegerLiteral: (source, acceptor) => {
+  private readonly highlightRules = defineRules<HighlightRuleMap>({
+    ImportDeclaration: (element, acceptor) => {
+      const { type, modifier } = this.getSemanticInfo(element.item?.entity?.ref)
+      if (type) {
+        acceptor({
+          node: element,
+          property: 'alias',
+          type,
+          modifier,
+        })
+      }
+    },
+
+    ImportItem: (element, acceptor) => {
+      const { type = SemanticTokenTypes.namespace, modifier } = this.getSemanticInfo(element.entity?.ref)
       acceptor({
-        node: source,
+        node: element,
+        property: 'entity',
+        type,
+        modifier,
+      })
+    },
+
+    IntegerLiteral: (element, acceptor) => {
+      acceptor({
+        node: element,
         property: 'value',
         type: SemanticTokenTypes.number,
       })
     },
 
-    FloatingLiteral: (source, acceptor) => {
+    FloatLiteral: (element, acceptor) => {
       acceptor({
-        node: source,
+        node: element,
         property: 'value',
         type: SemanticTokenTypes.number,
       })
     },
 
-    UnquotedString: (source, acceptor) => {
+    UnquotedString: (element, acceptor) => {
       acceptor({
-        node: source,
+        node: element,
         property: 'value',
         type: SemanticTokenTypes.string,
       })
     },
 
-    BracketExpression: (source, acceptor) => {
-      const locations = stream(source.path).filter(isBracketLocation)
+    BracketExpression: (element, acceptor) => {
+      const locations = stream(element.path).filter(isBracketLocation)
       const [first, ...rest] = locations
 
       switch (firstTokenTypeName(first)) {
@@ -87,195 +112,217 @@ export class ZenScriptSemanticTokenProvider extends AbstractSemanticTokenProvide
       })
     },
 
-    ValueParameter: (source, acceptor) => {
+    ValueParameter: (element, acceptor) => {
       acceptor({
-        node: source,
+        node: element,
         property: 'name',
         type: SemanticTokenTypes.parameter,
-        modifier: SemanticTokenModifiers.readonly,
+        modifier: [SemanticTokenModifiers.declaration, SemanticTokenModifiers.readonly],
       })
     },
 
-    LoopParameter: (source, acceptor) => {
+    LoopParameter: (element, acceptor) => {
       acceptor({
-        node: source,
-        property: 'name',
-        type: SemanticTokenTypes.parameter,
-        modifier: SemanticTokenModifiers.readonly,
-      })
-    },
-
-    NamedTypeReference: (source, acceptor) => {
-      acceptor({
-        node: source,
-        property: 'path',
-        type: SemanticTokenTypes.class,
-      })
-      acceptor({
-        node: source,
-        property: 'typeArguments',
-        type: SemanticTokenTypes.class,
-      })
-    },
-
-    ReferenceExpression: (source, acceptor) => {
-      switch (source.target?.ref?.$type) {
-        // @ts-expect-error SyntheticHierarchyNode
-        case 'SyntheticHierarchyNode':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.namespace,
-          })
-          break
-
-        case 'ClassDeclaration':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.class,
-          })
-          break
-
-        case 'VariableDeclaration':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.variable,
-            modifier: READONLY_PREFIX.includes(source.target.ref.prefix) ? SemanticTokenModifiers.readonly : undefined,
-          })
-          break
-
-        case 'FunctionDeclaration':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.function,
-          })
-          break
-
-        case 'LoopParameter':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.parameter,
-            modifier: SemanticTokenModifiers.readonly,
-          })
-          break
-
-        case 'ValueParameter':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.parameter,
-            modifier: SemanticTokenModifiers.readonly,
-          })
-          break
-
-        // @ts-expect-error SyntheticStringLiteral
-        case 'SyntheticStringLiteral':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.string,
-          })
-          break
-      }
-    },
-
-    MemberAccess: (source, acceptor) => {
-      switch (source.target?.ref?.$type) {
-        case 'Script':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.namespace,
-          })
-          break
-
-        case 'FunctionDeclaration':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.function,
-          })
-          break
-
-        case 'ClassDeclaration':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.class,
-          })
-          break
-
-        case 'FieldDeclaration':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.property,
-          })
-          break
-
-        // @ts-expect-error SyntheticHierarchyNode
-        case 'SyntheticHierarchyNode':
-          acceptor({
-            node: source,
-            property: 'target',
-            type: SemanticTokenTypes.namespace,
-          })
-          break
-
-        case 'ValueParameter':
-          // dynamic member
-          acceptor({
-            node: source,
-            property: 'target',
-            type: isStringType(this.typeComputer.inferType(source.target.ref)) ? SemanticTokenTypes.string : SemanticTokenTypes.variable,
-          })
-          break
-      }
-    },
-
-    FunctionDeclaration: (source, acceptor) => {
-      acceptor({
-        node: source,
-        property: 'name',
-        type: SemanticTokenTypes.function,
-      })
-    },
-
-    ClassDeclaration: (source, acceptor) => {
-      acceptor({
-        node: source,
-        property: 'name',
-        type: SemanticTokenTypes.class,
-      })
-    },
-
-    TypeParameter: (source, acceptor) => {
-      acceptor({
-        node: source,
-        property: 'name',
-        type: SemanticTokenTypes.typeParameter,
-      })
-    },
-
-    FieldDeclaration: (source, acceptor) => {
-      acceptor({
-        node: source,
-        property: 'name',
-        type: SemanticTokenTypes.property,
-      })
-    },
-
-    VariableDeclaration: (source, acceptor) => {
-      acceptor({
-        node: source,
+        node: element,
         property: 'name',
         type: SemanticTokenTypes.variable,
-        modifier: READONLY_PREFIX.includes(source.prefix) ? SemanticTokenModifiers.readonly : undefined,
+        modifier: [SemanticTokenModifiers.declaration, SemanticTokenModifiers.readonly],
       })
+    },
+
+    NamedType: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'typeArgs',
+        type: SemanticTokenTypes.class,
+      })
+    },
+
+    NamedTypeItem: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'entity',
+        type: SemanticTokenTypes.class,
+      })
+    },
+
+    ReferenceExpression: (element, acceptor) => {
+      const name = element.entity.$refText
+      const entity = element.entity?.ref
+      if (name === 'this' && (isClassDeclaration(entity) || isExpandFunctionDeclaration(entity?.$container))) {
+        acceptor({
+          node: element,
+          property: 'entity',
+          type: SemanticTokenTypes.variable,
+        })
+      }
+      else {
+        const { type, modifier } = this.getSemanticInfo(entity)
+        if (type) {
+          acceptor({
+            node: element,
+            property: 'entity',
+            type,
+            modifier,
+          })
+        }
+      }
+    },
+
+    AccessExpression: (element, acceptor) => {
+      const entity = element.entity?.ref
+      if (isOperatorFunctionDeclaration(entity?.$container) && entity.$container.operator === '.') {
+        acceptor({
+          node: element,
+          property: 'entity',
+          type: SemanticTokenTypes.string,
+        })
+      }
+      else {
+        const { type, modifier } = this.getSemanticInfo(element.entity?.ref)
+        if (type) {
+          acceptor({
+            node: element,
+            property: 'entity',
+            type,
+            modifier,
+          })
+        }
+      }
+    },
+
+    FunctionDeclaration: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'name',
+        type: SemanticTokenTypes.function,
+        modifier: SemanticTokenModifiers.declaration,
+      })
+    },
+
+    ExpandFunctionDeclaration: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'name',
+        type: SemanticTokenTypes.function,
+        modifier: SemanticTokenModifiers.declaration,
+      })
+    },
+
+    ClassDeclaration: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'name',
+        type: SemanticTokenTypes.class,
+        modifier: SemanticTokenModifiers.declaration,
+      })
+    },
+
+    TypeParameter: (element, acceptor) => {
+      acceptor({
+        node: element,
+        property: 'name',
+        type: SemanticTokenTypes.typeParameter,
+        modifier: SemanticTokenModifiers.declaration,
+      })
+    },
+
+    FieldDeclaration: (element, acceptor) => {
+      const { type = SemanticTokenTypes.property, modifier = [] } = this.getSemanticInfo(element)
+      acceptor({
+        node: element,
+        property: 'name',
+        type,
+        modifier: [SemanticTokenModifiers.declaration, modifier].flat(),
+      })
+    },
+
+    VariableDeclaration: (element, acceptor) => {
+      const { type = SemanticTokenTypes.variable, modifier = [] } = this.getSemanticInfo(element)
+      acceptor({
+        node: element,
+        property: 'name',
+        type,
+        modifier: [SemanticTokenModifiers.declaration, modifier].flat(),
+      })
+    },
+  })
+
+  private getSemanticInfo(element: AstNode | undefined): SemanticInfo {
+    return this.semanticInfoRules(element?.$type)?.call(this, element) ?? {}
+  }
+
+  private readonly semanticInfoRules = defineRules<SemanticInfoRuleMap>({
+    ImportDeclaration: (element) => {
+      return this.getSemanticInfo(element.item?.entity?.ref)
+    },
+
+    Script: () => ({
+      type: SemanticTokenTypes.namespace,
+    }),
+
+    ValueParameter: () => ({
+      type: SemanticTokenTypes.parameter,
+      modifier: SemanticTokenModifiers.readonly,
+    }),
+
+    LoopParameter: () => ({
+      type: SemanticTokenTypes.variable,
+      modifier: SemanticTokenModifiers.readonly,
+    }),
+
+    FunctionDeclaration: () => ({
+      type: SemanticTokenTypes.function,
+    }),
+
+    ExpandFunctionDeclaration: () => ({
+      type: SemanticTokenTypes.function,
+    }),
+
+    ClassDeclaration: () => ({
+      type: SemanticTokenTypes.class,
+    }),
+
+    ConstructorDeclaration: () => ({
+      type: SemanticTokenTypes.class,
+    }),
+
+    TypeParameter: () => ({
+      type: SemanticTokenTypes.typeParameter,
+    }),
+
+    FieldDeclaration: (element) => {
+      const modifier: SemanticTokenModifiers[] = []
+      if (isReadonly(element)) {
+        modifier.push(SemanticTokenModifiers.readonly)
+      }
+      if (isStatic(element)) {
+        modifier.push(SemanticTokenModifiers.static)
+      }
+      return {
+        type: SemanticTokenTypes.property,
+        modifier,
+      }
+    },
+
+    VariableDeclaration: (element) => {
+      const modifier: SemanticTokenModifiers[] = []
+      if (isReadonly(element)) {
+        modifier.push(SemanticTokenModifiers.readonly)
+      }
+      if (isStatic(element)) {
+        modifier.push(SemanticTokenModifiers.static)
+      }
+      return {
+        type: SemanticTokenTypes.variable,
+        modifier,
+      }
+    },
+
+    SyntheticAstNode: ({ content }) => {
+      if (isNamespaceNode(content)) {
+        return { type: SemanticTokenTypes.namespace }
+      }
     },
   })
 }

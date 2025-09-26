@@ -1,36 +1,41 @@
 import type { AstNode, AstNodeDescription, Stream, URI } from 'langium'
-import type { BracketExpression, ClassDeclaration, ClassMemberDeclaration, FunctionDeclaration, ImportDeclaration, OperatorFunctionDeclaration } from '../generated/ast'
-import { AstUtils, isAstNodeDescription, stream } from 'langium'
-import { isBracketExpression, isClassDeclaration, isFunctionDeclaration, isImportDeclaration, isOperatorFunctionDeclaration, isScript } from '../generated/ast'
-import { isZs } from './document'
+import type { ClassDeclaration } from '../generated/ast'
+import { isAstNode, isAstNodeDescription } from 'langium'
+import * as ast from '../generated/ast'
 import { toStream } from './stream'
 
 export function isToplevel(node: AstNode | undefined): boolean {
-  return isScript(node?.$container)
+  return isAstNode(node) && ast.isScript(node?.$container)
 }
 
-export function isStatic(node: AstNode | undefined) {
-  return node && 'prefix' in node && node.prefix === 'static'
+export function isStatic(node: AstNode | undefined): boolean {
+  return isAstNode(node) && 'variance' in node && node.variance === 'static'
 }
 
-export function isGlobal(node: AstNode | undefined) {
-  return node && 'prefix' in node && node.prefix === 'global'
+export function isGlobal(node: AstNode | undefined): boolean {
+  return isAstNode(node) && 'variance' in node && node.variance === 'global'
 }
 
-export function isVal(node: AstNode | undefined) {
-  return node && 'prefix' in node && node.prefix === 'val'
+export function isReadonly(node: AstNode | undefined): boolean {
+  return isAstNode(node) && 'variance' in node && typeof node.variance === 'string' && /val|static|global/.test(node.variance)
 }
 
-export function isImportable(node: AstNode | undefined) {
-  if (isScript(node)) {
-    return isZs(AstUtils.getDocument(node))
+export function isExposed(node: AstNode): boolean {
+  if (isToplevel(node)) {
+    if (ast.isFunctionDeclaration(node)) {
+      return node.variance === undefined
+    }
+    else if (ast.isVariableDeclaration(node)) {
+      return node.variance === 'static'
+    }
+    else if (ast.isClassDeclaration(node)) {
+      return true
+    }
   }
-  else if (isToplevel(node) && isFunctionDeclaration(node)) {
-    return true
+  else if (ast.isClassMemberDeclaration(node)) {
+    return 'variance' in node && node.variance === 'static'
   }
-  else {
-    return isStatic(node) || isClassDeclaration(node)
-  }
+  return false
 }
 
 export function getDocumentUri(node: AstNode | undefined): URI | undefined {
@@ -43,36 +48,23 @@ export function getDocumentUri(node: AstNode | undefined): URI | undefined {
   }
 }
 
-export function getPathAsString(importDecl: ImportDeclaration, index?: number): string
-export function getPathAsString(bracket: BracketExpression, index?: number): string
-export function getPathAsString(astNode: ImportDeclaration | BracketExpression, index?: number): string {
-  if (isImportDeclaration(astNode)) {
-    let names = astNode.path.map(it => it.$refText)
-    if (index !== undefined) {
-      names = names.slice(0, index + 1)
-    }
-    return names.join('.')
+export function getPathAsString(element: ast.BracketExpression, index?: number): string {
+  const separator = ':'
+  let names = element.path.map(it => it.$cstNode!.text)
+  if (index !== undefined) {
+    names = names.slice(0, index + 1)
   }
-  else if (isBracketExpression(astNode)) {
-    let names = astNode.path.map(it => it.$cstNode!.text)
-    if (index !== undefined) {
-      names = names.slice(0, index + 1)
-    }
-    return names.join(':')
-  }
-  else {
-    throw new Error(`Illegal argument: ${astNode}`)
-  }
+  return names.join(separator)
 }
 
 export function toAstNode(item: AstNode | AstNodeDescription): AstNode | undefined {
   return isAstNodeDescription(item) ? item.node : item
 }
 
-export function streamClassChain(classDecl: ClassDeclaration): Stream<ClassDeclaration> {
+export function streamClassChain(decl: ClassDeclaration | undefined): Stream<ClassDeclaration> {
   return toStream(function* () {
     const visited = new Set<ClassDeclaration>()
-    const deque = [classDecl]
+    const deque = [decl]
     while (deque.length) {
       const head = deque.shift()
       if (!head || visited.has(head)) {
@@ -82,21 +74,26 @@ export function streamClassChain(classDecl: ClassDeclaration): Stream<ClassDecla
       yield head
       visited.add(head)
       head.superTypes
-        .map(it => it.path.at(-1)?.ref)
-        .filter(isClassDeclaration)
+        .map((it) => {
+          let entity = it.item.entity?.ref
+          if (ast.isImportDeclaration(entity)) {
+            entity = entity.item?.entity?.ref
+          }
+          return entity
+        })
+        .filter(ast.isClassDeclaration)
         .forEach(it => deque.push(it))
     }
   })
 }
 
-export function streamDeclaredMembers(classDecl: ClassDeclaration): Stream<ClassMemberDeclaration> {
-  return stream(classDecl.members)
-}
-
-export function streamDeclaredFunctions(classDecl: ClassDeclaration): Stream<FunctionDeclaration> {
-  return streamDeclaredMembers(classDecl).filter(isFunctionDeclaration)
-}
-
-export function streamDeclaredOperators(classDecl: ClassDeclaration): Stream<OperatorFunctionDeclaration> {
-  return streamDeclaredMembers(classDecl).filter(isOperatorFunctionDeclaration)
+export function getDirectChildOf(container: AstNode, seed: AstNode): AstNode {
+  let node: AstNode | undefined = seed
+  while (node) {
+    if (node.$container === container) {
+      return node
+    }
+    node = node.$container
+  }
+  throw new Error('Direct child not found')
 }

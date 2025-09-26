@@ -1,204 +1,369 @@
-import type { AstNode, AstNodeDescription, ReferenceInfo, Scope, ScopeOptions } from 'langium'
+import type { AstNode, AstNodeDescription, DefaultReference, LocalSymbols, Reference, ReferenceInfo, Scope, Stream } from 'langium'
 import type { ZenScriptAstType } from '../generated/ast'
 import type { ZenScriptServices } from '../module'
-import type { OverloadResolver } from '../typing/overload-resolver'
-import type { DescriptionCreator } from '../workspace/description-creator'
+import type { TypeComputer } from '../typing/type-computer'
+import type { Type } from '../typing/type-description'
 import type { PackageManager } from '../workspace/package-manager'
-import type { DynamicProvider } from './dynamic-provider'
 import type { MemberProvider } from './member-provider'
-import { substringBeforeLast } from '@intellizen/shared'
-import { AstUtils, DefaultScopeProvider, EMPTY_SCOPE, stream, StreamScope } from 'langium'
-import { ClassDeclaration, ImportDeclaration, isCallExpression, isClassDeclaration, isConstructorDeclaration, isScript, TypeParameter } from '../generated/ast'
-import { getPathAsString } from '../utils/ast'
+import { AstUtils, DefaultScopeProvider, EMPTY_STREAM, RefResolving, stream } from 'langium'
+import * as ast from '../generated/ast'
+import { getSubstType, isArrayType, isClassType, isFunctionType, isListType } from '../typing/type-description'
+import { getDirectChildOf, isGlobal } from '../utils/ast'
 import { defineRules } from '../utils/rule'
-import { generateStream } from '../utils/stream'
+import { createSyntheticDescription } from './synthetic'
 
-type SourceMap = ZenScriptAstType
-type RuleMap = { [K in keyof SourceMap]?: (source: ReferenceInfo & { container: SourceMap[K] }) => Scope }
+type RuleSpec = ZenScriptAstType
+type RuleMap = { [K in keyof RuleSpec]?: (node: RuleSpec[K], info: ReferenceInfo, provider: ZenScriptScopeProvider) => Generator<AstNodeDescription> }
+
+function createSymbolScope(generator: () => Generator<AstNodeDescription> | undefined): Scope {
+  return {
+    getElement(name: string): AstNodeDescription | undefined {
+      return generator()?.find(it => it.name === name)
+    },
+
+    getElements(name: string): Stream<AstNodeDescription> {
+      const it = generator()?.filter(it => it.name === name)
+      return it ? stream(it) : EMPTY_STREAM
+    },
+
+    getAllElements(): Stream<AstNodeDescription> {
+      const it = generator()
+      return it ? stream(it) : EMPTY_STREAM
+    },
+  }
+}
+
+export function isResolvingReference(reference: Reference): boolean {
+  const _ref = (reference as DefaultReference)._ref
+  return _ref === RefResolving
+}
 
 export class ZenScriptScopeProvider extends DefaultScopeProvider {
   private readonly packageManager: PackageManager
   private readonly memberProvider: MemberProvider
-  private readonly dynamicProvider: DynamicProvider
-  private readonly descriptionCreator: DescriptionCreator
-  private readonly overloadResolver: OverloadResolver
+  private readonly typeComputer: TypeComputer
 
   constructor(services: ZenScriptServices) {
     super(services)
-    this.packageManager = services.shared.workspace.PackageManager
+    this.packageManager = services.references.PackageManager
     this.memberProvider = services.references.MemberProvider
-    this.dynamicProvider = services.references.DynamicProvider
-    this.descriptionCreator = services.workspace.AstNodeDescriptionProvider
-    this.overloadResolver = services.typing.OverloadResolver
+    this.typeComputer = services.typing.TypeComputer
   }
 
-  override getScope(context: ReferenceInfo): Scope {
-    return this.rules(context.container.$type)?.call(this, context) ?? EMPTY_SCOPE
+  override getScope(info: ReferenceInfo): Scope {
+    return createSymbolScope(() => this.getSymbols(info.container, info))
   }
 
-  private lexicalScope(
-    astNode: AstNode,
-    processor: (desc: AstNodeDescription) => AstNodeDescription | undefined,
-    outside?: Scope,
-  ): Scope {
-    const precomputed = AstUtils.getDocument(astNode).precomputedScopes
-    return generateStream(astNode, it => it.$container)
-      .map(container => precomputed?.get(container))
-      .nonNullable()
-      .map(descriptions => stream(descriptions).map(processor).nonNullable())
-      .reduceRight((outer, descriptions) => this.createScope(descriptions, outer), outside as Scope)
+  private getSymbols(node: AstNode, info: ReferenceInfo): Generator<AstNodeDescription> | undefined {
+    return this.symbolRules(node.$type)?.call(this, node, info, this)
   }
 
-  private dynamicScope(astNode: AstNode, outside?: Scope) {
-    return this.createScope(this.dynamicProvider.streamDynamicDescriptions(astNode), outside)
-  }
-
-  private globalScope(outside?: Scope) {
-    return this.createScope(this.indexManager.allElements(), outside)
-  }
-
-  private packageScope(outside?: Scope) {
-    const packages = stream(this.packageManager.root.children.values())
-      .filter(it => it.isInternalNode())
-    return this.createScopeForNodes(packages, outside)
-  }
-
-  private classScope(outside?: Scope) {
-    const classes = stream(this.packageManager.root.children.values())
-      .filter(it => it.isDataNode())
-      .flatMap(it => it.data)
-      .filter(isClassDeclaration)
-    return this.createScopeForNodes(classes, outside)
-  }
-
-  private importedScope(source: ReferenceInfo, outside?: Scope) {
-    const script = AstUtils.findRootNode(source.container)
-    if (!isScript(script)) {
-      return EMPTY_SCOPE
-    }
-
-    const refText = source.reference.$refText
-    const imports = stream(script.imports)
-      .flatMap(it => this.descriptionCreator.createImportedDescriptions(it))
-
-    if (refText === '' || !isCallExpression(source.container.$container) || source.container.$containerProperty !== 'receiver') {
-      return this.createScope(imports, outside)
-    }
-
-    // TODO: Workaround for function overloading, may rework after langium supports multi-target references
-    const maybeCandidates = imports
-      .filter(it => it.name === refText)
-      .map(it => it.node)
-      .nonNullable()
-      .toArray()
-
-    const overloads = this.overloadResolver.resolveOverloads(source.container.$container, maybeCandidates)
-    const descriptions = overloads.map(it => this.descriptionCreator.createDynamicDescription(it, refText))
-    return this.createScope(descriptions, outside)
-  }
-
-  override createScopeForNodes(nodes: Iterable<AstNode>, outerScope?: Scope, options?: ScopeOptions): Scope {
-    return new StreamScope(stream(nodes).map(it => this.descriptionCreator.getOrCreateDescription(it)), outerScope, options)
-  }
-
-  private readonly rules = defineRules<RuleMap>({
-    ImportDeclaration: (source) => {
-      const fullPath = getPathAsString(source.container, source.index)
-
-      let subPath: string
-      const endsWithDot = source.container.$cstNode?.text.endsWith('.') ?? false
-      if (source.index === undefined && endsWithDot) {
-        subPath = fullPath
+  private readonly symbolRules = defineRules<RuleMap>({
+    * ImportItem(node, info, provider) {
+      if (node.previous) {
+        yield* provider.getMembers(node.previous)
       }
       else {
-        subPath = substringBeforeLast(fullPath, '.')
+        yield* provider.getRootPackages()
       }
-
-      const tree = this.packageManager.find(subPath)
-      if (!tree) {
-        return EMPTY_SCOPE
-      }
-
-      const elements = stream(tree.children.values()).flatMap((child) => {
-        if (child.isDataNode()) {
-          return child.data.values().map(it => this.descriptionCreator.getOrCreateDescription(it))
-        }
-        else {
-          return this.descriptionCreator.getOrCreateDescription(child)
-        }
-      })
-
-      return new StreamScope(elements)
     },
 
-    ReferenceExpression: (source) => {
-      let outer: Scope
-      outer = this.packageScope()
-      outer = this.globalScope(outer)
-      outer = this.importedScope(source, outer)
-      outer = this.dynamicScope(source.container, outer)
+    * NamedTypeItem(node, info, provider) {
+      if (node.previous) {
+        yield* provider.getMembers(node.previous)
+      }
+      else {
+        yield* provider.getOuterSymbols(AstUtils.getContainerOfType(node, ast.isNamedType), info)
+        yield* provider.getBuiltinClasses()
+        yield* provider.getRootPackages()
+      }
+    },
 
-      const processor = (desc: AstNodeDescription) => {
-        switch (desc.type) {
-          case TypeParameter:
-            return
-          case ImportDeclaration: {
-            return
+    * ReferenceExpression(node, info, provider) {
+      yield* provider.getOuterSymbols(node, info)
+    },
+
+    * Script(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const documentSymbols = AstUtils.getDocument(node).localSymbols
+        if (documentSymbols) {
+          const locals = provider.getLocals(node, node.statements, info)
+          const statics = provider.getStatics(node.statements)
+          const functions = node.functions.filter(it => it.variance === undefined)
+          const classes = node.classes
+          const imports = node.imports
+          yield* provider.toDescriptions([locals, statics, functions, classes, imports], documentSymbols)
+        }
+        yield* provider.getGlobals()
+        yield* provider.getBuiltinClasses()
+        yield* provider.getRootPackages()
+      }
+      else if (ast.isNamedTypeItem(info.container) && !info.container.previous) {
+        const documentSymbols = AstUtils.getDocument(node).localSymbols
+        if (documentSymbols) {
+          const classes = node.classes
+          const imports = node.imports.filter((it) => {
+            const entity = it.item.entity?.ref
+            return !(ast.isFunctionDeclaration(entity) || ast.isVariableDeclaration(entity))
+          })
+          yield* provider.toDescriptions([classes, imports], documentSymbols)
+        }
+        yield* provider.getBuiltinClasses()
+        yield* provider.getRootPackages()
+      }
+    },
+
+    * FunctionDeclaration(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.FunctionDeclaration.body) {
+          const documentSymbols = AstUtils.getDocument(node).localSymbols
+          if (documentSymbols) {
+            const locals = provider.getLocals(node, node.body, info)
+            const params = node.params.toReversed()
+            const self = node
+            yield* provider.toDescriptions([locals, params, self], documentSymbols)
           }
-          case ClassDeclaration: {
-            const classDecl = desc.node as ClassDeclaration
-            const callExpr = source.container.$container
-            if (isCallExpression(callExpr) && source.container.$containerProperty === 'receiver') {
-              const constructors = classDecl.members.filter(isConstructorDeclaration)
-              const overloads = this.overloadResolver.resolveOverloads(callExpr, constructors)
-              if (overloads[0]) {
-                return this.descriptionCreator.getOrCreateDescription(overloads[0])
-              }
+        }
+      }
+    },
+
+    * ExpandFunctionDeclaration(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.FunctionDeclaration.body) {
+          const syntheticThis = provider.descriptions.createDescription(node.type, 'this')
+          yield syntheticThis
+
+          const documentSymbols = AstUtils.getDocument(node).localSymbols
+          if (documentSymbols) {
+            const locals = provider.getLocals(node, node.body, info)
+            const params = node.params.toReversed()
+            yield* provider.toDescriptions([locals, params], documentSymbols)
+          }
+        }
+      }
+    },
+
+    * ClassDeclaration(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const syntheticThis = provider.descriptions.createDescription(node, 'this')
+        yield syntheticThis
+
+        const documentSymbols = AstUtils.getDocument(node).localSymbols
+        if (documentSymbols) {
+          const self = node
+          const members = node.members
+          yield* provider.toDescriptions([self, members], documentSymbols)
+        }
+      }
+      else if (ast.isNamedTypeItem(info.container) && !info.container.previous) {
+        const documentSymbols = AstUtils.getDocument(node).localSymbols
+        if (documentSymbols) {
+          const self = node
+          const typeParams = node.typeParams
+          yield* provider.toDescriptions([self, typeParams], documentSymbols)
+        }
+      }
+    },
+
+    * ConstructorDeclaration(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.FunctionDeclaration.body) {
+          const documentSymbols = AstUtils.getDocument(node).localSymbols
+          if (documentSymbols) {
+            const locals = provider.getLocals(node, node.body, info)
+            const params = node.params.toReversed()
+            yield* provider.toDescriptions([locals, params], documentSymbols)
+          }
+        }
+      }
+    },
+
+    * ForStatement(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.ForStatement.body) {
+          const documentSymbols = AstUtils.getDocument(node).localSymbols
+          if (documentSymbols) {
+            const params = node.params.toReversed()
+            yield* provider.toDescriptions(params, documentSymbols)
+          }
+        }
+      }
+    },
+
+    * BlockStatement(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const documentSymbols = AstUtils.getDocument(node).localSymbols
+        if (documentSymbols) {
+          const locals = provider.getLocals(node, node.body, info)
+          yield* provider.toDescriptions(locals, documentSymbols)
+        }
+      }
+    },
+
+    * AccessExpression(node, info, provider) {
+      if (node === info.container) {
+        const members = provider.memberProvider.getMembers(node.receiver)
+        let overload: ast.OperatorFunctionDeclaration | undefined
+        for (const it of members) {
+          if (ast.isOperatorFunctionDeclaration(it) && it.operator === '.' && it.params.length === 1) {
+            overload = it
+            continue
+          }
+          const desc = provider.tryMapToDescription(it)
+          if (desc) {
+            yield desc
+          }
+        }
+        if (overload) {
+          yield provider.descriptions.createDescription(overload.params[0], info.reference.$refText)
+        }
+      }
+      else if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.AccessExpression.args) {
+          if (!isResolvingReference(node.entity)) {
+            const type = provider.getParamType(child.$containerIndex!, node.entity?.ref)
+            if (type) {
+              yield* provider.getTypeStaticSymbols(type)
             }
-            return desc
           }
-          default:
-            return desc
         }
-      }
-      return this.lexicalScope(source.container, processor, outer)
-    },
-
-    MemberAccess: (source) => {
-      const outer = this.dynamicScope(source.container)
-      const members = this.memberProvider.streamMembers(source.container.receiver)
-
-      if (source.reference.$refText && isCallExpression(source.container.$container) && source.container.$containerProperty === 'receiver') {
-        const maybeCandidates = members.filter(it => this.nameProvider.getName(it) === source.reference.$refText).toArray()
-        const overloads = this.overloadResolver.resolveOverloads(source.container.$container, maybeCandidates)
-        return this.createScopeForNodes(overloads, outer)
-      }
-      else {
-        return this.createScopeForNodes(members, outer)
       }
     },
 
-    NamedTypeReference: (source) => {
-      if (!source.index) {
-        let outer = this.packageScope()
-        outer = this.classScope(outer)
-        const processor = (desc: AstNodeDescription) => {
-          switch (desc.type) {
-            case TypeParameter:
-            case ClassDeclaration:
-              return desc
-            case ImportDeclaration: {
-              return this.descriptionCreator.createImportedDescriptions(desc.node as ImportDeclaration)[0]
-            }
+    * CallExpression(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.CallExpression.args) {
+          const type = provider.getParamType(child.$containerIndex!, node.receiver)
+          if (type) {
+            yield* provider.getTypeStaticSymbols(type)
           }
         }
-        return this.lexicalScope(source.container, processor, outer)
+      }
+    },
+
+    * FunctionExpression(node, info, provider) {
+      if (ast.isReferenceExpression(info.container)) {
+        const child = getDirectChildOf(node, info.container)
+        if (child.$containerProperty === ast.FunctionDeclaration.body) {
+          const documentSymbols = AstUtils.getDocument(node).localSymbols
+          if (documentSymbols) {
+            const locals = provider.getLocals(node, node.body, info)
+            const params = node.params.toReversed()
+            const self = node
+            yield* provider.toDescriptions([locals, params, self], documentSymbols)
+          }
+        }
+      }
+    },
+
+    * ArrayLiteral(node, info, provider) {
+      let expect: Type | undefined
+      if (ast.isTypeCastExpression(node.$container)) {
+        expect = provider.typeComputer.inferType(node.$container)
       }
       else {
-        const prev = source.container.path[source.index - 1].ref
-        const members = this.memberProvider.streamMembers(prev)
-        return this.createScopeForNodes(members)
+        expect = undefined
+      }
+
+      if (isArrayType(expect) || isListType(expect)) {
+        const elementType = getSubstType(expect, 'T')
+        if (elementType) {
+          yield* provider.getTypeStaticSymbols(elementType)
+        }
       }
     },
   })
+
+  private tryMapToDescription(node: AstNode): AstNodeDescription | undefined {
+    const name = this.nameProvider.getName(node)
+    if (name) {
+      return this.descriptions.getOrCreateDescription(node, name)
+    }
+  }
+
+  private toDescriptions(candidates: (AstNode | AstNode[])[], documentSymbols: LocalSymbols): Stream<AstNodeDescription> {
+    return stream(candidates)
+      .flat()
+      .filter(it => documentSymbols.has(it))
+      .flatMap(it => documentSymbols.getStream(it))
+  }
+
+  private getRootPackages(): Stream<AstNodeDescription> {
+    return stream(this.packageManager.root.children.values())
+      .filter(it => !it.hasData())
+      .map(it => createSyntheticDescription(it.name, it))
+  }
+
+  private getBuiltinClasses(): Stream<AstNodeDescription> {
+    return stream(this.packageManager.root.children.values())
+      .filter(it => it.hasData())
+      .flatMap(it => it.data)
+      .filter(ast.isClassDeclaration)
+      .map(it => this.tryMapToDescription(it))
+      .nonNullable()
+  }
+
+  private getGlobals(): Stream<AstNodeDescription> {
+    return this.indexManager.allElements().filter(it => isGlobal(it.node))
+  }
+
+  private getMembers(node: AstNode): Stream<AstNodeDescription> {
+    return this.memberProvider.getMembers(node)
+      .map(it => this.tryMapToDescription(it))
+      .nonNullable()
+  }
+
+  private getLocals(container: AstNode, body: AstNode[], info: ReferenceInfo): ast.VariableDeclaration[] {
+    const upperBound = getDirectChildOf(container, info.container).$containerIndex
+    return body
+      .slice(0, upperBound)
+      .filter(ast.isVariableDeclaration)
+      .filter(it => it.variance === 'var' || it.variance === 'val')
+      .toReversed()
+  }
+
+  private getStatics(body: AstNode[]): ast.VariableDeclaration[] {
+    return body
+      .filter(ast.isVariableDeclaration)
+      .filter(it => it.variance === 'static')
+  }
+
+  private getOuterSymbols(seed: AstNode | undefined, info: ReferenceInfo): Stream<AstNodeDescription> {
+    const deque: Iterable<AstNodeDescription>[] = []
+    let level: AstNode | undefined = seed?.$container
+    while (level) {
+      const symbols = this.getSymbols(level, info)
+      if (symbols) {
+        deque.push(symbols)
+      }
+      level = level.$container
+    }
+    return stream(deque).flat()
+  }
+
+  private getParamType(index: number, receiver: AstNode | undefined): Type | undefined {
+    const receiverType = this.typeComputer.inferType(receiver)
+    if (isFunctionType(receiverType)) {
+      return receiverType.params[index]
+    }
+  }
+
+  private getTypeStaticSymbols(type: Type): Stream<AstNodeDescription> {
+    if (isClassType(type) && type.decl) {
+      return stream(type.decl.members)
+        .filter(ast.isFunctionDeclaration)
+        .filter(it => it.variance === 'static')
+        .filter(it => it.params.length === 0)
+        .map(it => this.descriptions.getOrCreateDescription(it, it.name))
+    }
+    else {
+      return EMPTY_STREAM
+    }
+  }
 }

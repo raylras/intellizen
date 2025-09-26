@@ -2,10 +2,10 @@ import type { ZenScriptServices } from '../module'
 import type { MemberProvider } from '../reference/member-provider'
 import type { TypeComputer } from './type-computer'
 import type { Type, ZenScriptType } from './type-description'
-import { isFunctionDeclaration, isOperatorFunctionDeclaration } from '../generated/ast'
+import { isOperatorFunctionDeclaration } from '../generated/ast'
 import { streamClassChain } from '../utils/ast'
 import { defineRules } from '../utils/rule'
-import { isAnyType, isClassType, isCompoundType, isFunctionType, isIntersectionType, isTypeVariable, isUnionType } from './type-description'
+import { isAnyType, isClassType, isCompoundType, isFunctionType, isIntersectionType, isTypeVariable, isUnionType, isUnknownType } from './type-description'
 
 export interface TypeAssignability {
   // target := source
@@ -21,13 +21,13 @@ export interface TypeConversion {
 }
 
 export interface SubType {
-  isSubType: (subType: Type, superType: Type) => boolean
+  isSubType: (subType: Type | undefined, superType: Type | undefined) => boolean
 }
 
 export type TypeFeatures = TypeAssignability & TypeEquality & TypeConversion & SubType
 
-type SourceMap = ZenScriptType
-type RuleMap = { [K in keyof SourceMap]?: (self: SourceMap[K], other: Type) => boolean }
+type RuleSpec = ZenScriptType
+type RuleMap = { [K in keyof RuleSpec]?: (self: RuleSpec[K], other: Type) => boolean }
 
 export class ZenScriptTypeFeatures implements TypeFeatures {
   private readonly typeComputer: TypeComputer
@@ -89,27 +89,31 @@ export class ZenScriptTypeFeatures implements TypeFeatures {
         return false
       }
 
-      if (self.declaration !== other.declaration) {
+      if (!self.decl || !other.decl) {
         return false
       }
 
-      if (self.declaration.typeParameters.length !== other.declaration.typeParameters.length) {
+      if (self.decl !== other.decl) {
         return false
       }
 
-      const selfSubstitutions = self.declaration.typeParameters.map(it => self.substitutions.get(it)).filter(it => !!it)
-      const otherSubstitutions = other.declaration.typeParameters.map(it => other.substitutions.get(it)).filter(it => !!it)
-      return selfSubstitutions.every((type, index) => this.areTypesEqual(type, otherSubstitutions[index]))
+      if (self.decl.typeParams.length !== other.decl.typeParams.length) {
+        return false
+      }
+
+      const selfSubst = self.decl.typeParams.map(it => self.subst?.get(it))
+      const otherSubst = other.decl.typeParams.map(it => other.subst?.get(it))
+      return selfSubst.every((type, index) => this.areTypesEqual(type, otherSubst[index]))
     },
 
     FunctionType: (self, other) => {
       return isFunctionType(other)
-        && this.areTypesEqual(self.returnType, other.returnType)
-        && self.paramTypes.every((it, index) => this.areTypesEqual(it, other.paramTypes[index]))
+        && this.areTypesEqual(self.ret, other.ret)
+        && self.params.every((it, index) => this.areTypesEqual(it, other.params[index]))
     },
 
     TypeVariable: (self, other) => {
-      return isTypeVariable(other) && self.declaration === other.declaration
+      return isTypeVariable(other) && self.decl === other.decl
     },
 
     UnionType: (self, other) => {
@@ -139,43 +143,39 @@ export class ZenScriptTypeFeatures implements TypeFeatures {
   }
 
   private readonly typeConversionRules = defineRules<RuleMap>({
+    UnknownType: () => true,
+
     ClassType: (from, to) => {
-      if (isAnyType(from) || isAnyType(to)) {
+      if (isAnyType(from) || isAnyType(to) || isUnknownType(to)) {
         return true
       }
 
-      return this.memberProvider.streamMembers(from)
+      return this.memberProvider.getMembers(from)
         .filter(isOperatorFunctionDeclaration)
-        .filter(it => it.op === 'as')
-        .map(it => this.typeComputer.inferType(it.returnTypeRef))
+        .filter(it => it.operator === 'as')
+        .map(it => this.typeComputer.inferType(it.retType))
         .nonNullable()
         .some(it => this.isSubType(to, it))
     },
 
     FunctionType: (from, to) => {
-      if (isAnyType(to)) {
+      if (isAnyType(to) || isUnknownType(to)) {
         return true
       }
 
-      let toFuncType: Type | undefined
-      if (isFunctionType(to)) {
-        toFuncType = to
-      }
-      else if (isClassType(to)) {
-        const lambdaDecl = this.memberProvider.streamMembers(to)
-          .filter(isFunctionDeclaration)
-          .filter(it => it.prefix === 'lambda')
-          .head()
-        toFuncType = this.typeComputer.inferType(lambdaDecl)
+      let func: Type | undefined = to
+      if (isClassType(to)) {
+        const lam = this.memberProvider.getLambda(to)
+        func = this.typeComputer.inferType(lam)
       }
 
-      if (!isFunctionType(toFuncType)) {
+      if (!isFunctionType(func)) {
         return false
       }
 
-      return from.paramTypes.length === toFuncType.paramTypes.length
-        && this.isConvertible(from.returnType, toFuncType.returnType)
-        && from.paramTypes.every((param, index) => this.isConvertible(param, toFuncType.paramTypes[index]))
+      return from.params.length === func.params.length
+        && this.isConvertible(from.ret, func.ret)
+        && from.params.every((param, index) => this.isConvertible(param, func.params[index]))
     },
 
     CompoundType: (from, to) => {
@@ -203,13 +203,13 @@ export class ZenScriptTypeFeatures implements TypeFeatures {
 
   private readonly subTypeRules = defineRules<RuleMap>({
     ClassType: (subType, superType) => {
-      return isClassType(superType) && streamClassChain(superType.declaration).includes(subType.declaration)
+      return (isClassType(superType) && superType.decl && subType.decl) ? streamClassChain(superType.decl).includes(subType.decl) : false
     },
   })
 
   private readonly superTypeRules = defineRules<RuleMap>({
     ClassType: (superType, subType) => {
-      return isClassType(subType) && streamClassChain(subType.declaration).includes(superType.declaration)
+      return (isClassType(subType) && subType.decl && superType.decl) ? streamClassChain(subType.decl).includes(superType.decl) : false
     },
 
     IntersectionType: (superType, subType) => {

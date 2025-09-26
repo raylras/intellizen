@@ -1,6 +1,14 @@
 zenClass List<T> {
     val length as int;
 
+    /**
+     * Appends the given value to the end of this list.
+     *
+     * @param value Element to be appended to this list
+     * @return This list
+     */
+    function add(value as T) as List<T>;
+
     function remove(value as any) as void;
 
     operator has(value as any) as bool;

@@ -1,191 +1,177 @@
-import type { AstNode, Stream } from 'langium'
-import type { ClassDeclaration, OperatorFunctionDeclaration, ZenScriptAstType } from '../generated/ast'
+import type { AstNode, IndexManager, Stream } from 'langium'
 import type { ZenScriptServices } from '../module'
 import type { TypeComputer } from '../typing/type-computer'
+import type { Type, ZenScriptType } from '../typing/type-description'
+import type { TypeFeatures } from '../typing/type-features'
 import type { ZenScriptSyntheticAstType } from './synthetic'
 import { EMPTY_STREAM, stream } from 'langium'
-import { isClassDeclaration, isConstructorDeclaration, isFunctionDeclaration, isMemberAccess, isOperatorFunctionDeclaration, isReferenceExpression, isScript, isVariableDeclaration } from '../generated/ast'
-import { ClassType, isAnyType, isClassType, isFunctionType, type Type, type ZenScriptType } from '../typing/type-description'
-import { isStatic, streamClassChain, streamDeclaredMembers } from '../utils/ast'
+import * as ast from '../generated/ast'
+import { applySubstIfPresent, ClassType } from '../typing/type-description'
+import { isStatic, streamClassChain } from '../utils/ast'
+import { isNamespaceNode } from '../utils/namespace-tree'
 import { defineRules } from '../utils/rule'
-import { isSyntheticAstNode } from './synthetic'
+import { createSyntheticAstNode } from './synthetic'
 
 export interface MemberProvider {
-  streamMembers: (source: AstNode | Type | undefined) => Stream<AstNode>
-  streamOperators: (source: AstNode | Type | undefined) => Stream<OperatorFunctionDeclaration>
+  getMembers: (element: AstNode | Type | undefined) => Stream<AstNode>
+  getLambda: (element: AstNode | Type | undefined) => ast.FunctionDeclaration | undefined
+  getOperator: (element: AstNode | Type | undefined, operator: string, length: number) => ast.OperatorFunctionDeclaration | undefined
 }
 
-type SourceMap = ZenScriptAstType & ZenScriptType & ZenScriptSyntheticAstType
-type RuleMap = { [K in keyof SourceMap]?: (source: SourceMap[K]) => Stream<AstNode> }
+type RuleSpec = ast.ZenScriptAstType & ZenScriptType & ZenScriptSyntheticAstType
+type RuleMap = { [K in keyof RuleSpec]?: (element: RuleSpec[K]) => Stream<AstNode> | undefined }
 
 export class ZenScriptMemberProvider implements MemberProvider {
-  private readonly typeComputer: TypeComputer
+  private readonly typeComputer: () => TypeComputer
+  private readonly typeFeatures: () => TypeFeatures
+  private readonly indexManager: IndexManager
 
   constructor(services: ZenScriptServices) {
-    this.typeComputer = services.typing.TypeComputer
+    this.typeComputer = () => services.typing.TypeComputer
+    this.typeFeatures = () => services.typing.TypeFeatures
+    this.indexManager = services.shared.workspace.IndexManager
   }
 
-  public streamMembers(source: AstNode | Type | undefined): Stream<AstNode> {
-    return this.rules(source?.$type)?.call(this, source) ?? EMPTY_STREAM
+  getMembers(element: AstNode | Type | undefined): Stream<AstNode> {
+    return this.memberRules(element?.$type)?.call(this, element) ?? EMPTY_STREAM
   }
 
-  public streamOperators(source: AstNode | Type | undefined): Stream<OperatorFunctionDeclaration> {
-    return this.streamMembers(source).filter(isOperatorFunctionDeclaration)
+  getLambda(element: AstNode | Type | undefined) {
+    return this.getMembers(element)
+      .filter(ast.isFunctionDeclaration)
+      .filter(it => it.variance === 'lambda')
+      .head()
   }
 
-  private readonly rules = defineRules<RuleMap>({
-    SyntheticHierarchyNode: (source) => {
-      const declarations = stream(source.children.values())
-        .filter(it => it.isDataNode())
-        .flatMap(it => it.data)
-      const packages = stream(source.children.values())
-        .filter(it => it.isInternalNode())
-      return stream(declarations, packages)
+  getOperator(type: AstNode | Type | undefined, operator: string, length: number) {
+    return this.getMembers(type)
+      .filter(ast.isOperatorFunctionDeclaration)
+      .filter(it => it.operator === operator)
+      .filter(it => it.params.length === length)
+      .head()
+  }
+
+  private getTypeMembers(element: AstNode): Stream<AstNode> {
+    const type = this.typeComputer().inferType(element)
+    return this.getMembers(type).concat(this.getExpandMembers(type))
+  }
+
+  private getExpandMembers(element: Type | undefined): Stream<ast.ExpandMemberDeclaration | ast.ExpandFunctionDeclaration> {
+    if (!element)
+      return EMPTY_STREAM
+
+    return this.indexManager.allElements().flatMap((symbol) => {
+      if (ast.isExpandDeclaration(symbol.node)) {
+        const type = this.typeComputer().inferType(symbol.node.type)
+        if (this.typeFeatures().isSubType(element, type)) {
+          return symbol.node.members
+        }
+      }
+      else if (ast.isExpandFunctionDeclaration(symbol.node)) {
+        const type = this.typeComputer().inferType(symbol.node.type)
+        if (this.typeFeatures().isSubType(element, type)) {
+          return symbol.node
+        }
+      }
+      return EMPTY_STREAM
+    })
+  }
+
+  private readonly memberRules = defineRules<RuleMap>({
+    SyntheticAstNode: ({ content }) => {
+      if (isNamespaceNode(content)) {
+        return stream(content.children.values())
+          .flatMap(it => it.hasData() ? it.data : createSyntheticAstNode(it))
+      }
     },
 
-    Script: (source) => {
+    NamedTypeItem: (element) => {
+      return this.getMembers(element.entity.ref)
+    },
+
+    Script: (element) => {
       return stream<AstNode>(
-        source.classes,
-        source.functions,
-        source.statements.filter(isVariableDeclaration).filter(isStatic),
+        element.classes,
+        element.functions,
+        element.statements.filter(ast.isVariableDeclaration).filter(isStatic),
       )
     },
 
-    ImportDeclaration: (source) => {
-      return this.streamMembers(source.path.at(-1)?.ref)
+    ImportDeclaration: (element) => {
+      return this.getMembers(element.item?.entity?.ref)
     },
 
-    ClassDeclaration: (source) => {
-      return streamDeclaredMembers(source).filter(isStatic)
+    ImportItem: (element) => {
+      return this.getMembers(element.entity?.ref)
     },
 
-    VariableDeclaration: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
+    ClassDeclaration: (element) => {
+      return stream(element.members).filter(isStatic)
     },
 
-    LoopParameter: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
+    VariableDeclaration: element => this.getTypeMembers(element),
 
-    ValueParameter: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
+    LoopParameter: element => this.getTypeMembers(element),
 
-    MemberAccess: (source) => {
-      const target = source.target.ref
-      if (!target) {
-        return EMPTY_STREAM
+    ValueParameter: element => this.getTypeMembers(element),
+
+    ParenthesizedExpression: element => this.getTypeMembers(element),
+
+    PrefixExpression: element => this.getTypeMembers(element),
+
+    InfixExpression: element => this.getTypeMembers(element),
+
+    IndexExpression: element => this.getTypeMembers(element),
+
+    CallExpression: element => this.getTypeMembers(element),
+
+    BracketExpression: element => this.getTypeMembers(element),
+
+    FieldDeclaration: element => this.getTypeMembers(element),
+
+    StringLiteral: element => this.getTypeMembers(element),
+
+    StringTemplate: element => this.getTypeMembers(element),
+
+    IntegerLiteral: element => this.getTypeMembers(element),
+
+    FloatLiteral: element => this.getTypeMembers(element),
+
+    BooleanLiteral: element => this.getTypeMembers(element),
+
+    AccessExpression: (element) => {
+      if (element.withArgs) {
+        return this.getTypeMembers(element)
       }
 
-      if (isSyntheticAstNode(target) || isScript(target) || isClassDeclaration(target)) {
-        return this.streamMembers(target)
+      const entity = element.entity?.ref
+      if (!entity) {
+        return
       }
 
-      const receiverType = this.typeComputer.inferType(source.receiver)
+      const receiverType = this.typeComputer().inferType(element.receiver)
       if (!receiverType) {
-        // may be static declaration
-        return this.streamMembers(target)
+        return this.getMembers(entity)
       }
 
-      let type = this.typeComputer.inferType(source)
-      if (isClassType(receiverType)) {
-        type = type?.substituteTypeParameters(receiverType.substitutions)
+      const elementType = this.typeComputer().inferType(element)
+      const substituted = applySubstIfPresent(receiverType, elementType)
+      return this.getMembers(substituted)
+    },
+
+    ReferenceExpression: (element) => {
+      const entity = element.entity?.ref
+      const name = element.entity.$refText
+      if (name === 'this') {
+        return this.getTypeMembers(element)
       }
-      return this.streamMembers(type)
-    },
-
-    ParenthesizedExpression: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    PrefixExpression: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    InfixExpression: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    IndexingExpression: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    ReferenceExpression: (source) => {
-      if (source.target.$refText === 'this' && isClassDeclaration(source.target.ref)) {
-        return this.streamMembers(new ClassType(source.target.ref, new Map()))
+      else {
+        return this.getMembers(entity)
       }
-      return this.streamMembers(source.target.ref)
     },
 
-    CallExpression: (source) => {
-      const receiver = source.receiver
-      if (isReferenceExpression(receiver) || isMemberAccess(receiver)) {
-        const target = receiver.target.ref
-        if (isConstructorDeclaration(target)) {
-          const owner = target.$container as ClassDeclaration
-          return this.streamMembers(new ClassType(owner, new Map()))
-        }
-
-        if (isFunctionDeclaration(target)) {
-          const returnType = this.typeComputer.inferType(target.returnTypeRef)
-          return this.streamMembers(returnType)
-        }
-      }
-
-      const receiverType = this.typeComputer.inferType(source.receiver)
-      if (isFunctionType(receiverType)) {
-        return this.streamMembers(receiverType.returnType)
-      }
-      if (isAnyType(receiverType)) {
-        return this.streamMembers(receiverType)
-      }
-      return EMPTY_STREAM
-    },
-
-    BracketExpression: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    FieldDeclaration: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    StringLiteral: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    StringTemplate: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    IntegerLiteral: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    FloatingLiteral: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    BooleanLiteral: (source) => {
-      const type = this.typeComputer.inferType(source)
-      return this.streamMembers(type)
-    },
-
-    ClassType: (source) => {
-      return streamClassChain(source.declaration)
+    ClassType: (element) => {
+      return streamClassChain(element.decl)
         .flatMap(it => it.members)
         .filter(it => !isStatic(it))
     },
