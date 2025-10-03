@@ -20,6 +20,7 @@
     "@antfu/eslint-config": "^5.0.0",
     "@types/node": "^24.1.0",
     "concurrently": "^9.2.0",
+    "cpx2": "^8.0.0",
     "eslint": "^9.32.0",
     "pnpm": "^10.14.0",
     "shx": "^0.4.0",

@@ -13,8 +13,8 @@
       "outputs": ["LICENSE", "syntaxes/**"]
     },
     "package": {
-		"dependsOn": ["build"],
-		"outputs": ["./*.vsix"]
+      "dependsOn": ["build"],
+      "outputs": ["./*.vsix"]
     }
   }
 }

@@ -68,9 +68,11 @@
     ]
   },
   "scripts": {
-    "watch": "tsup --watch",
-    "build": "tsup",
+    "watch": "concurrently \"wait-on ../intellizen-zenscript/dist && pnpm build:watch\" \"pnpm copy:watch\"",
+    "build": "tsup --minify",
+    "build:watch": "tsup --sourcemap --watch",
     "copy": "shx cp ../../LICENSE ./ && wait-on ../intellizen-zenscript/syntaxes && shx cp -r ../intellizen-zenscript/syntaxes ./",
+    "copy:watch": "wait-on ../intellizen-zenscript/syntaxes && cpx ../intellizen-zenscript/syntaxes/* ./syntaxes --watch",
     "package": "vsce package --no-dependencies",
     "clean": "shx rm -rf dist LICENSE syntaxes"
   },
