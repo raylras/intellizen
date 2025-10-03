@@ -1,0 +1,17 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": [
+    "//"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["langium:generate"],
+      "outputs": ["dist/**"]
+    },
+    "langium:generate": {
+      "dependsOn": [],
+      "inputs": ["langium-config.json", "src/grammar/*.langium"],
+      "outputs": ["src/generated/**", "syntaxes/**"]
+    }
+  }
+}

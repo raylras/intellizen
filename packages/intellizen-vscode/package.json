@@ -1,0 +1,87 @@
+{
+  "publisher": "intellizen-dev",
+  "name": "intellizen-vscode",
+  "displayName": "IntelliZen",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "A extension with ZenScript(Based CraftTweaker) for VSCode",
+  "author": "intellizen-dev",
+  "license": "MIT",
+  "homepage": "https://github.com/intellizen-dev/intellizen#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/intellizen-dev/intellizen"
+  },
+  "bugs": {
+    "url": "https://github.com/intellizen-dev/intellizen/issues"
+  },
+  "main": "./dist/node/extension.cjs",
+  "files": [
+    "LICENSE",
+    "dist/**/*.cjs",
+    "syntaxes",
+    "intellizen-schema.json"
+  ],
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "zenscript",
+        "aliases": [
+          "ZenScript"
+        ],
+        "extensions": [
+          ".zs"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "zenscript-declaration",
+        "aliases": [
+          "ZenScript Declaration"
+        ],
+        "extensions": [
+          ".dzs"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "zenscript",
+        "scopeName": "source.zenscript",
+        "path": "./syntaxes/zenscript.tmLanguage.json"
+      },
+      {
+        "language": "zenscript-declaration",
+        "scopeName": "source.zenscript-declaration",
+        "path": "./syntaxes/declaration.tmLanguage.json"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "intellizen.json",
+        "url": "./intellizen-schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "watch": "tsup --watch",
+    "build": "tsup",
+    "copy": "shx cp ../../LICENSE ./ && wait-on ../intellizen-zenscript/syntaxes && shx cp -r ../intellizen-zenscript/syntaxes ./",
+    "package": "vsce package --no-dependencies",
+    "clean": "shx rm -rf dist LICENSE syntaxes"
+  },
+  "dependencies": {
+    "intellizen-zenscript": "workspace:*",
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@types/vscode": "^1.102.0",
+    "@vscode/vsce": "^3.6.2"
+  }
+}

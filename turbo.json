@@ -3,20 +3,21 @@
   "globalEnv": ["NODE_ENV"],
   "tasks": {
     "build": {
-      "dependsOn": ["langium:generate", "^build"],
-      "outputs": ["out/**"],
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "watch": {
+      "with": ["watch"],
+      "persistent": true,
       "cache": false
     },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "langium:generate": {
+    "clean": {
+      "dependsOn": ["^clean"],
       "cache": false
     },
-    "langium:generate:watch": {
-      "cache": false,
-      "persistent": true
+    "package": {
+      "dependsOn": ["intellizen-vscode#package"],
+      "cache": false
     }
   }
 }

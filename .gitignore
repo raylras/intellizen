@@ -11,8 +11,9 @@ lib-cov
 logs
 node_modules
 temp
-**/**/generated
+generated
 syntaxes
 .eslintcache
 dist
 tsconfig.vitest-temp.json
+packages/intellizen-vscode/LICENSE

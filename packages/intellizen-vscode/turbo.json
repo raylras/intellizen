@@ -1,0 +1,20 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": [
+    "//"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["copy", "^build"],
+      "outputs": ["dist/**"]
+    },
+    "copy": {
+      "inputs": ["../../LICENSE", "../intellizen-zenscript/syntaxes"],
+      "outputs": ["LICENSE", "syntaxes/**"]
+    },
+    "package": {
+		"dependsOn": ["build"],
+		"outputs": ["./*.vsix"]
+    }
+  }
+}

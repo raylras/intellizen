@@ -1,10 +1,12 @@
 {
-  "name": "intellizen",
+  "name": "intellizen-workspace",
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development conc \"turbo langium:generate:watch\" \"turbo dev\"",
-    "build": "turbo build",
+    "build": "turbo run build",
+    "watch": "turbo run watch",
+    "clean": "turbo run clean",
+    "package": "turbo run package",
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --cache --fix",
     "test": "pnpm build && vitest --typecheck",
@@ -17,17 +19,13 @@
   "devDependencies": {
     "@antfu/eslint-config": "^5.0.0",
     "@types/node": "^24.1.0",
-    "@types/wait-on": "^5.3.4",
     "concurrently": "^9.2.0",
-    "cross-env": "^10.0.0",
     "eslint": "^9.32.0",
     "pnpm": "^10.14.0",
-    "reactive-vscode": "0.3.1",
-    "rimraf": "^6.0.1",
+    "shx": "^0.4.0",
     "tsup": "^8.5.0",
     "turbo": "^2.5.5",
     "typescript": "^5.9.2",
-    "vite": "^7.0.6",
     "vitest": "^3.2.4",
     "wait-on": "^8.0.4"
   }
