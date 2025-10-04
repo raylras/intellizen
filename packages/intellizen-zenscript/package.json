@@ -13,7 +13,7 @@
     "dist"
   ],
   "scripts": {
-    "watch": "concurrently \"pnpm langium:generate:watch\" \"wait-on src/generated && pnpm build:watch\"",
+    "watch": "pnpm clean && concurrently \"pnpm langium:generate:watch\" \"wait-on src/generated && pnpm build:watch\"",
     "build": "tsup --minify",
     "build:watch": "tsup --sourcemap --watch",
     "langium:generate": "langium generate --mode production",

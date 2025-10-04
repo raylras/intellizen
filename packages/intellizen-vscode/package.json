@@ -18,9 +18,9 @@
   "main": "./dist/node/extension.cjs",
   "files": [
     "LICENSE",
-    "dist/**/*.cjs",
-    "syntaxes",
-    "intellizen-schema.json"
+    "dist",
+    "intellizen-schema.json",
+    "syntaxes"
   ],
   "engines": {
     "vscode": "^1.102.0"
@@ -68,7 +68,7 @@
     ]
   },
   "scripts": {
-    "watch": "concurrently \"wait-on ../intellizen-zenscript/dist && pnpm build:watch\" \"pnpm copy:watch\"",
+    "watch": "pnpm clean && concurrently \"wait-on ../intellizen-zenscript/dist && pnpm build:watch\" \"pnpm copy:watch\"",
     "build": "tsup --minify",
     "build:watch": "tsup --sourcemap --watch",
     "copy": "shx cp ../../LICENSE ./ && wait-on ../intellizen-zenscript/syntaxes && shx cp -r ../intellizen-zenscript/syntaxes ./",
