@@ -3,11 +3,13 @@ import type { LanguageClientOptions, ServerOptions } from 'vscode-languageclient
 import { env } from 'node:process'
 import { window } from 'vscode'
 import { LanguageClient, TransportKind } from 'vscode-languageclient/node'
+import { DzsBuiltinFileSystemProvider } from './fs-provider'
 
 let client: LanguageClient
 
 // This function is called when the extension is activated.
 export function activate(context: ExtensionContext): void {
+  DzsBuiltinFileSystemProvider.register(context)
   client = startLanguageClient(context)
 }
 

@@ -25,6 +25,10 @@
   "engines": {
     "vscode": "^1.102.0"
   },
+  "activationEvents": [
+    "onFileSystem:builtin",
+    "workspaceContains:**/intellizen.json"
+  ],
   "contributes": {
     "languages": [
       {
