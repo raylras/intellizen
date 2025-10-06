@@ -3,13 +3,13 @@ import type { LanguageClientOptions, ServerOptions } from 'vscode-languageclient
 import { env } from 'node:process'
 import { window } from 'vscode'
 import { LanguageClient, TransportKind } from 'vscode-languageclient/node'
-import { DzsBuiltinFileSystemProvider } from './fs-provider'
+import { BuiltinFileSystemProvider } from './virtual-file-system'
 
 let client: LanguageClient
 
 // This function is called when the extension is activated.
 export function activate(context: ExtensionContext): void {
-  DzsBuiltinFileSystemProvider.register(context)
+  BuiltinFileSystemProvider.register(context)
   client = startLanguageClient(context)
 }
 
@@ -59,6 +59,7 @@ function startLanguageClient(context: ExtensionContext): LanguageClient {
     documentSelector: [
       { scheme: 'file', language: 'zenscript' },
       { scheme: 'file', language: 'zenscript-declaration' },
+      { scheme: 'builtin', language: 'zenscript-declaration' },
     ],
     outputChannel: window.createOutputChannel('ZenScript', 'log'),
   }

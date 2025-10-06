@@ -2,9 +2,8 @@ import type { LangiumDocument, URI, WorkspaceFolder } from 'langium'
 import type { ZenScriptSharedServices } from '../module'
 import type { ConfigurationManager } from './configuration-manager'
 import { DefaultWorkspaceManager, interruptAndCheck, UriUtils } from 'langium'
-
 import { CancellationToken } from 'vscode-languageserver'
-import { getBuiltins } from '../builtins/builtin'
+import { builtinsUriMap } from '../builtins/builtin'
 import { traverseInside } from '../utils/fs'
 
 declare module 'langium' {
@@ -32,12 +31,8 @@ export class ZenScriptWorkspaceManager extends DefaultWorkspaceManager {
 
   override async performStartup(folders: WorkspaceFolder[]): Promise<LangiumDocument[]> {
     const fileExtensions = this.serviceRegistry.all.flatMap(e => e.LanguageMetaData.fileExtensions)
-    const srcRoots: URI[] = [
-      // getBuiltinsUri(),
-      ...folders.flatMap(folder => folder.config.srcRoots),
-    ]
+    const srcRoots = folders.flatMap(folder => folder.config.srcRoots)
     const documents: LangiumDocument[] = []
-
     await this.loadAdditionalDocuments(folders, document => documents.push(document))
     for (const srcRoot of srcRoots) {
       const srcFiles = await this.collect(srcRoot, fileExtensions)
@@ -49,6 +44,13 @@ export class ZenScriptWorkspaceManager extends DefaultWorkspaceManager {
     }
     this._ready.resolve()
     return documents
+  }
+
+  override async loadAdditionalDocuments(folders: WorkspaceFolder[], collector: (document: LangiumDocument) => void): Promise<void> {
+    for (const [uri, content] of builtinsUriMap.entries()) {
+      const document = this.langiumDocuments.createDocument(uri, content)
+      collector(document)
+    }
   }
 
   private async collect(srcRoot: URI, fileExtensions: string[]): Promise<URI[]> {
@@ -65,19 +67,5 @@ export class ZenScriptWorkspaceManager extends DefaultWorkspaceManager {
     const document = await this.langiumDocuments.getOrCreateDocument(srcFile)
     Object.assign(document, { srcRootUri: srcRoot })
     return document
-  }
-
-  private async processBuiltin(srcFile: URI, content: string): Promise<LangiumDocument> {
-    const document = this.langiumDocuments.createDocument(srcFile, content)
-    Object.assign(document, { srcRootUri: 'builtin:///builtin' })
-    return document
-  }
-
-  protected async loadAdditionalDocuments(folders: WorkspaceFolder[], collector: (document: LangiumDocument) => void): Promise<void> {
-    await super.loadAdditionalDocuments(folders, collector)
-    for (const builtin of getBuiltins()) {
-      const document = await this.processBuiltin(builtin.uri, builtin.content)
-      collector(document)
-    }
   }
 }

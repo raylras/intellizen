@@ -1,60 +1,48 @@
 import { URI } from 'langium'
+import _any from './any.dzs'
+import _Array from './Array.dzs'
+import _bool from './bool.dzs'
+import _byte from './byte.dzs'
+import _double from './double.dzs'
+import _Entry from './Entry.dzs'
+import _float from './float.dzs'
+import _int from './int.dzs'
+import _IntRange from './IntRage.dzs'
+import _List from './List.dzs'
+import _long from './long.dzs'
+import _Map from './Map.dzs'
+import _short from './short.dzs'
+import _string from './string.dzs'
+import _void from './void.dzs'
 
-import anyDzs from './any.dzs'
-import arrayDzs from './Array.dzs'
-import boolDzs from './bool.dzs'
-import byteDzs from './byte.dzs'
-import doubleDzs from './double.dzs'
-import entryDzs from './Entry.dzs'
-import floatDzs from './float.dzs'
-import intDzs from './int.dzs'
-import intRangeDzs from './IntRage.dzs'
-import listDzs from './List.dzs'
-import longDzs from './long.dzs'
-import mapDzs from './Map.dzs'
-import shortDzs from './short.dzs'
-import stringDzs from './string.dzs'
-import voidDzs from './void.dzs'
+export const builtinsFileMap = createBuiltinsFileMap()
 
-export interface Builtin {
-  uri: URI
-  content: string
+function createBuiltinsFileMap(): Map<string, string> {
+  return new Map([
+    ['any.dzs', _any],
+    ['Array.dzs', _Array],
+    ['bool.dzs', _bool],
+    ['byte.dzs', _byte],
+    ['double.dzs', _double],
+    ['Entry.dzs', _Entry],
+    ['float.dzs', _float],
+    ['int.dzs', _int],
+    ['IntRange.dzs', _IntRange],
+    ['List.dzs', _List],
+    ['long.dzs', _long],
+    ['Map.dzs', _Map],
+    ['short.dzs', _short],
+    ['string.dzs', _string],
+    ['void.dzs', _void],
+  ])
 }
 
-const builtins = [
-  { name: 'any.dzs', content: anyDzs },
-  { name: 'Array.dzs', content: arrayDzs },
-  { name: 'bool.dzs', content: boolDzs },
-  { name: 'byte.dzs', content: byteDzs },
-  { name: 'double.dzs', content: doubleDzs },
-  { name: 'Entry.dzs', content: entryDzs },
-  { name: 'float.dzs', content: floatDzs },
-  { name: 'int.dzs', content: intDzs },
-  { name: 'IntRange.dzs', content: intRangeDzs },
-  { name: 'List.dzs', content: listDzs },
-  { name: 'long.dzs', content: longDzs },
-  { name: 'Map.dzs', content: mapDzs },
-  { name: 'short.dzs', content: shortDzs },
-  { name: 'string.dzs', content: stringDzs },
-  { name: 'void.dzs', content: voidDzs },
-]
+export const builtinsUriMap = createBuiltinsUriMap()
 
-// const builtinsDir = __dirname
-// const builtinsUri = URI.file(builtinsDir)
-
-// export function getBuiltinsUri(): URI {
-//   return builtinsUri
-// }
+function createBuiltinsUriMap(): Map<URI, string> {
+  return new Map(builtinsFileMap.entries().map(([filename, content]) => [URI.from({ scheme: 'builtin', path: `/${filename}` }), content]))
+}
 
 export function isBuiltin(uri: URI | string): boolean {
-  const uriObj = typeof uri === 'string' ? URI.parse(uri) : uri
-  // "builtin://" is the scheme used by langium for built-in resources
-  return uriObj.scheme === 'builtin'
-}
-
-export function getBuiltins(): Builtin[] {
-  return builtins.map(builtin => ({
-    uri: URI.parse(`builtin:///builtin/${builtin.name}`),
-    content: builtin.content,
-  }))
+  return URI.parse(uri.toString()).scheme === 'builtin'
 }

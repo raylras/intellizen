@@ -18,7 +18,7 @@
   "main": "./dist/node/extension.cjs",
   "files": [
     "LICENSE",
-    "dist",
+    "dist/**/*.cjs",
     "intellizen-schema.json",
     "syntaxes"
   ],
