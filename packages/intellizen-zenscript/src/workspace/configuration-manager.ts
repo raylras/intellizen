@@ -1,4 +1,5 @@
 import type { FileSystemProvider, WorkspaceFolder } from 'langium'
+import type { Connection } from 'vscode-languageserver'
 import type { ZenScriptSharedServices } from '../module'
 import { Resolver } from '@stoplight/json-ref-resolver'
 import { URI, UriUtils } from 'langium'
@@ -45,10 +46,12 @@ export class ConfigError extends Error {
 
 export class ZenScriptConfigurationManager implements ConfigurationManager {
   private readonly fsProvider: FileSystemProvider
+  private readonly connection: Connection | undefined
   private readonly loadedListeners: LoadedListener[]
 
   constructor(services: ZenScriptSharedServices) {
     this.fsProvider = services.workspace.FileSystemProvider
+    this.connection = services.lsp.Connection
     this.loadedListeners = []
   }
 
@@ -92,7 +95,14 @@ export class ZenScriptConfigurationManager implements ConfigurationManager {
         config.srcRoots.push(srcRootUri)
       }
       else {
-        console.error(`Directory "${srcRootUri}" does not exist.`)
+        const message = `Src root uri "${srcRoot}" does not exist.`
+        this.connection?.window.showErrorMessage(message, {
+          title: 'Open intellizen.json',
+          // FIXME: apply command action here
+          command: 'workbench.action.files.openFile',
+          arguments: [configUri.toString()],
+        })
+        console.error(`[Error][Workspace/Startup] ${message}`)
       }
     }
 

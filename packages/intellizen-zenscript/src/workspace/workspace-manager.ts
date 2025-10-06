@@ -26,7 +26,7 @@ export class ZenScriptWorkspaceManager extends DefaultWorkspaceManager {
     await interruptAndCheck(cancelToken)
     const start = performance.now()
     await this.documentBuilder.build(documents, this.initialBuildOptions, cancelToken)
-    console.warn(`[Workspace/Build] Built ${documents.length} documents took ${Math.floor(performance.now() - start)} ms`)
+    console.warn(`[Info][Workspace/Build] Built ${documents.length} documents took ${Math.floor(performance.now() - start)} ms`)
   }
 
   override async performStartup(folders: WorkspaceFolder[]): Promise<LangiumDocument[]> {
@@ -40,7 +40,7 @@ export class ZenScriptWorkspaceManager extends DefaultWorkspaceManager {
       for (const srcFile of srcFiles) {
         documents.push(await this.process(srcFile, srcRoot))
       }
-      console.warn(`[Workspace/Startup] Created ${srcFiles.length} documents for srcRoot "${UriUtils.basename(srcRoot)}" took ${Math.floor(performance.now() - start)} ms`)
+      console.warn(`[Info][Workspace/Startup] Created ${srcFiles.length} documents for srcRoot "${UriUtils.basename(srcRoot)}" took ${Math.floor(performance.now() - start)} ms`)
     }
     this._ready.resolve()
     return documents
