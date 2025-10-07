@@ -16,4 +16,3 @@ syntaxes
 .eslintcache
 dist
 tsconfig.vitest-temp.json
-packages/intellizen-vscode/LICENSE

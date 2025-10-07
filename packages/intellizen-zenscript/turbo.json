@@ -8,10 +8,19 @@
       "dependsOn": ["langium:generate"],
       "outputs": ["dist/**"]
     },
+    "build:dev": {
+      "dependsOn": ["langium:generate:dev"],
+      "outputs": ["dist/**"],
+      "cache": false
+    },
     "langium:generate": {
-      "dependsOn": [],
       "inputs": ["langium-config.json", "src/grammar/*.langium"],
       "outputs": ["src/generated/**", "syntaxes/**"]
+    },
+    "langium:generate:dev": {
+      "inputs": ["langium-config.json", "src/grammar/*.langium"],
+      "outputs": ["src/generated/**", "syntaxes/**"],
+      "cache": false
     }
   }
 }

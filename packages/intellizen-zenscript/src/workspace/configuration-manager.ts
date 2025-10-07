@@ -1,7 +1,7 @@
 import type { FileSystemProvider, WorkspaceFolder } from 'langium'
 import type { Connection } from 'vscode-languageserver'
 import type { ZenScriptSharedServices } from '../module'
-import { Resolver } from '@stoplight/json-ref-resolver'
+import * as jsonRef from 'jsonref'
 import { URI, UriUtils } from 'langium'
 import { z } from 'zod'
 import { existsDirectory, findInside, isDirectory, isFile } from '../utils/fs'
@@ -86,8 +86,8 @@ export class ZenScriptConfigurationManager implements ConfigurationManager {
   private async load(config: WorkspaceConfig, configUri: URI) {
     const content = await this.fsProvider.readFile(configUri)
     const json = JSON.parse(content)
-    const resolved = await new Resolver().resolve(json)
-    const schema = IntelliZenJsonSchema.parse(resolved.result)
+    const resolved = await jsonRef.parse(json, { scope: 'http://example.com' })
+    const schema = IntelliZenJsonSchema.parse(resolved)
 
     for (const srcRoot of schema.srcRoots) {
       const srcRootUri = UriUtils.resolvePath(configUri, '..', srcRoot)

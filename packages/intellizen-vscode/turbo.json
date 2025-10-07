@@ -8,12 +8,24 @@
       "dependsOn": ["copy", "^build"],
       "outputs": ["dist/**"]
     },
+    "build:dev": {
+      "dependsOn": ["copy:dev", "^build:dev"],
+      "outputs": ["dist/**"],
+      "cache": false
+    },
     "copy": {
-      "inputs": ["../../LICENSE", "../intellizen-zenscript/syntaxes"],
-      "outputs": ["LICENSE", "syntaxes/**"]
+      "dependsOn": ["intellizen-zenscript#langium:generate"],
+      "inputs": ["../intellizen-zenscript/syntaxes"],
+      "outputs": ["syntaxes/**"]
+    },
+    "copy:dev": {
+      "dependsOn": ["intellizen-zenscript#langium:generate:dev"],
+      "inputs": ["../intellizen-zenscript/syntaxes"],
+      "outputs": ["syntaxes/**"],
+      "cache": false
     },
     "package": {
-      "dependsOn": ["build"],
+      "dependsOn": ["^build"],
       "outputs": ["./*.vsix"]
     }
   }

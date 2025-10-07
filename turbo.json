@@ -6,9 +6,9 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
-    "watch": {
-      "with": ["watch"],
-      "persistent": true,
+    "build:dev": {
+      "dependsOn": ["^build:dev"],
+      "outputs": ["dist/**"],
       "cache": false
     },
     "clean": {
