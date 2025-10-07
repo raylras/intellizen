@@ -15,8 +15,9 @@
   "scripts": {
     "build": "tsdown --minify",
     "build:dev": "tsdown --sourcemap",
-    "langium:generate": "langium generate --mode production",
-    "langium:generate:dev": "langium generate --mode development",
+    "langium:generate": "langium generate --mode production && pnpm copy",
+    "langium:generate:dev": "langium generate --mode development && pnpm copy",
+    "copy": "shx cp -r syntaxes ../intellizen-vscode/syntaxes",
     "clean": "shx rm -rf dist syntaxes src/generated"
   },
   "dependencies": {

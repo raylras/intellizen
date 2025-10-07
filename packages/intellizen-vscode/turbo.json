@@ -5,28 +5,18 @@
   ],
   "tasks": {
     "build": {
-      "dependsOn": ["copy", "^build"],
+      "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
     "build:dev": {
-      "dependsOn": ["copy:dev", "^build:dev"],
+      "dependsOn": ["^build:dev"],
       "outputs": ["dist/**"],
-      "cache": false
-    },
-    "copy": {
-      "dependsOn": ["intellizen-zenscript#langium:generate"],
-      "inputs": ["../intellizen-zenscript/syntaxes"],
-      "outputs": ["syntaxes/**"]
-    },
-    "copy:dev": {
-      "dependsOn": ["intellizen-zenscript#langium:generate:dev"],
-      "inputs": ["../intellizen-zenscript/syntaxes"],
-      "outputs": ["syntaxes/**"],
       "cache": false
     },
     "package": {
       "dependsOn": ["^build"],
-      "outputs": ["./*.vsix"]
+      "outputs": ["*.vsix"],
+      "cache": false
     }
   }
 }

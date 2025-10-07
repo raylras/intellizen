@@ -95,14 +95,18 @@ export class ZenScriptConfigurationManager implements ConfigurationManager {
         config.srcRoots.push(srcRootUri)
       }
       else {
-        const message = `Src root uri "${srcRoot}" does not exist.`
-        this.connection?.window.showErrorMessage(message, {
-          title: 'Open intellizen.json',
-          // FIXME: apply command action here
-          command: 'workbench.action.files.openFile',
-          arguments: [configUri.toString()],
-        })
+        const message = `Invalid srcRoot URI "${srcRoot}"`
         console.error(`[Error][Workspace/Startup] ${message}`)
+        const openFileAction = {
+          title: 'Open intellizen.json',
+        }
+        const action = await this.connection?.window.showErrorMessage(message, openFileAction)
+        if (action?.title === openFileAction.title) {
+          this.connection?.window.showDocument({
+            uri: configUri.toString(),
+            takeFocus: true,
+          })
+        }
       }
     }
 

@@ -74,7 +74,6 @@
   "scripts": {
     "build": "tsdown --minify",
     "build:dev": "tsdown --sourcemap",
-    "copy": "shx cp -r ../intellizen-zenscript/syntaxes ./syntaxes",
     "package": "vsce package --no-dependencies",
     "clean": "shx rm -rf dist syntaxes"
   },
