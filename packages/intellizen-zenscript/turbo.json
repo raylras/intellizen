@@ -15,11 +15,11 @@
     },
     "langium:generate": {
       "inputs": ["langium-config.json", "src/grammar/*.langium"],
-      "outputs": ["src/generated/**", "syntaxes/**"]
+      "outputs": ["src/generated/**", "syntaxes/**", "../intellizen-vscode/syntaxes/**"]
     },
     "langium:generate:dev": {
       "inputs": ["langium-config.json", "src/grammar/*.langium"],
-      "outputs": ["src/generated/**", "syntaxes/**"],
+      "outputs": ["src/generated/**", "syntaxes/**", "../intellizen-vscode/syntaxes/**"],
       "cache": false
     }
   }

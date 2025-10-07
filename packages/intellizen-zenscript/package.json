@@ -17,7 +17,7 @@
     "build:dev": "tsdown --sourcemap",
     "langium:generate": "langium generate --mode production && pnpm copy",
     "langium:generate:dev": "langium generate --mode development && pnpm copy",
-    "copy": "shx cp -r syntaxes ../intellizen-vscode/syntaxes",
+    "copy": "shx cp -r syntaxes ../intellizen-vscode/syntaxes && shx echo \"Done coping\"",
     "clean": "shx rm -rf dist syntaxes src/generated"
   },
   "dependencies": {

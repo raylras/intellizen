@@ -14,7 +14,7 @@
       "cache": false
     },
     "package": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["build"],
       "outputs": ["*.vsix"],
       "cache": false
     }

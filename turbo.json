@@ -16,7 +16,7 @@
       "cache": false
     },
     "package": {
-      "dependsOn": ["intellizen-vscode#package"],
+      "with": ["intellizen-vscode#package"],
       "cache": false
     }
   }
