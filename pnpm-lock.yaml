@@ -52,11 +52,8 @@ importers:
         specifier: ^9.0.1
         version: 9.0.1
     devDependencies:
-      '@types/node':
-        specifier: ^24.1.0
-        version: 24.1.0
       '@types/vscode':
-        specifier: ^1.102.0
+        specifier: ^1.100.0
         version: 1.102.0
       '@vscode/vsce':
         specifier: ^3.6.2

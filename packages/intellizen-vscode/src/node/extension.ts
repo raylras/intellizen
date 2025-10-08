@@ -15,14 +15,11 @@ export function activate(context: ExtensionContext): void {
 
 // This function is called when the extension is deactivated.
 export function deactivate(): Thenable<void> | undefined {
-  if (client) {
-    return client.stop()
-  }
-  return undefined
+  return client?.stop()
 }
 
 function startLanguageClient(context: ExtensionContext): LanguageClient {
-  const serverModule = context.asAbsolutePath('dist/node/langserver.cjs')
+  const serverModule = context.asAbsolutePath('dist/node/langserver.js')
 
   // If the extension is launched in debug mode then the debug server options are used
   // Otherwise the run options are used
