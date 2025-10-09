@@ -10,7 +10,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/intellizen-vscode"
       ],
       "outFiles": [
-        "${workspaceFolder}/packages/*/dist/**/*.cjs"
+        "${workspaceFolder}/packages/*/dist/**/*.js"
       ],
       "trace": true,
       "autoAttachChildProcesses": true
