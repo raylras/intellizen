@@ -21,6 +21,9 @@ ImportItem returns ImportItem:
 
 ClassDeclaration returns ClassDeclaration:
     'zenClass' name=ID
+    /* Grammar extension 'extends' provided by ZenUtils */
+    /* See -placeholder- */
+    ('extends' (superTypes+=NamedType (',' superTypes+=NamedType)*))?
     '{' members+=(FunctionDeclaration | FieldDeclaration | ConstructorDeclaration)* '}'
 ;
 
