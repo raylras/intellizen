@@ -11,5 +11,5 @@
    - `npm install -g pnpm`
    - `pnpm install`
 4. Start the development environment:
-   - `pnpm dev`
+   - `pnpm watch`
 5. Open the project in VS Code and press `F5` (or the key configured for running tasks in your settings).

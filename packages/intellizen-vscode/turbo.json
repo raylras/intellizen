@@ -1,6 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": ["NODE_ENV"],
+  "extends": [
+    "//"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -11,12 +13,9 @@
       "outputs": ["dist/**"],
       "cache": false
     },
-    "clean": {
-      "dependsOn": ["^clean"],
-      "cache": false
-    },
     "package": {
-      "with": ["intellizen-vscode#package"],
+      "dependsOn": ["build"],
+      "outputs": ["*.vsix"],
       "cache": false
     }
   }

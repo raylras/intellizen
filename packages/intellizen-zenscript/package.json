@@ -1,0 +1,31 @@
+{
+  "name": "intellizen-zenscript",
+  "type": "module",
+  "version": "0.0.1",
+  "author": "intellizen-dev",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --minify",
+    "build:dev": "tsdown --sourcemap",
+    "langium:generate": "langium generate --mode production && pnpm copy",
+    "langium:generate:dev": "langium generate --mode development && pnpm copy",
+    "copy": "shx cp -r syntaxes ../intellizen-vscode/syntaxes && shx echo \"Done coping\"",
+    "clean": "shx rm -rf dist syntaxes src/generated"
+  },
+  "dependencies": {
+    "immutable": "^5.1.3",
+    "jsonref": "^9.0.2",
+    "langium": "^4.0.0"
+  },
+  "devDependencies": {
+    "langium-cli": "^4.0.0"
+  }
+}

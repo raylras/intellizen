@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": [
+    "//"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["langium:generate"],
+      "outputs": ["dist/**"]
+    },
+    "build:dev": {
+      "dependsOn": ["langium:generate:dev"],
+      "outputs": ["dist/**"],
+      "cache": false
+    },
+    "langium:generate": {
+      "inputs": ["langium-config.json", "src/grammar/*.langium"],
+      "outputs": ["src/generated/**", "syntaxes/**", "../intellizen-vscode/syntaxes/**"]
+    },
+    "langium:generate:dev": {
+      "inputs": ["langium-config.json", "src/grammar/*.langium"],
+      "outputs": ["src/generated/**", "syntaxes/**", "../intellizen-vscode/syntaxes/**"],
+      "cache": false
+    }
+  }
+}

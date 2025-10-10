@@ -11,7 +11,7 @@ lib-cov
 logs
 node_modules
 temp
-**/**/generated
+generated
 syntaxes
 .eslintcache
 dist
