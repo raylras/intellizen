@@ -21,6 +21,9 @@ ImportItem returns ImportItem:
 
 ClassDeclaration returns ClassDeclaration:
     'zenClass' name=ID
+    /* Grammar extension 'extends' provided by ZenUtils */
+    /* See -placeholder- */
+    ('extends' (superTypes+=NamedType (',' superTypes+=NamedType)*))?
     '{' members+=(FunctionDeclaration | FieldDeclaration | ConstructorDeclaration)* '}'
 ;
 
@@ -38,12 +41,12 @@ FunctionDeclaration returns FunctionDeclaration:
 ;
 
 ExpandFunctionDeclaration returns ExpandFunctionDeclaration:
-    '$expand' type=Type '$' name=ID  '(' (params+=ValueParameter (',' params+=ValueParameter)*)? ')' ('as' retType=Type)? 
+    '$expand' type=Type '$' name=ID  '(' (params+=ValueParameter (',' params+=ValueParameter)*)? ')' ('as' retType=Type)?
     '{' body+=Statement* '}'
 ;
 
 ConstructorDeclaration returns ConstructorDeclaration:
-    'zenConstructor' '(' (params+=ValueParameter (',' params+=ValueParameter)*)? ')' 
+    'zenConstructor' '(' (params+=ValueParameter (',' params+=ValueParameter)*)? ')'
     '{' body+=Statement* '}'
 ;
 
@@ -204,6 +207,8 @@ ConditionalExpression returns ConditionalExpression:
     CoalesceExpression ({ConditionalExpression.condition=current} '?' thenBody=ConditionalExpression ':' elseBody=ConditionalExpression)?
 ;
 
+/* Grammar extension '??' provided by ZenUtils */
+/* See https://github.com/friendlyhj/ZenUtils/wiki/NullishOperators */
 CoalesceExpression returns InfixExpression:
     LogicalExpression ({InfixExpression.left=current} operator='??' right=LogicalExpression)*
 ;
@@ -257,6 +262,8 @@ PrefixExpression returns PrefixExpression:
 
 PostfixExpression returns PostfixExpression:
     PrimaryExpression
+    /* Grammar extension '?.' provided by ZenUtils */
+    /* See https://github.com/friendlyhj/ZenUtils/wiki/NullishOperators */
     ( {AccessExpression.receiver=current} operator=('.'|'?.') (entity=[Entity:ID] | entity=[Entity:STRING]) (withArgs?='(' (args+=Expression (',' args+=Expression)*)? ')')?
     | {IntRangeExpression.from=current} operator=('..'|'to') to=Expression
     | {TypeCastExpression.expr=current} 'as' type=Type
@@ -315,16 +322,18 @@ ParenthesizedExpression returns ParenthesizedExpression:
 ;
 
 FunctionExpression returns FunctionExpression:
-    'function' '(' (params+=ValueParameter (',' params+=ValueParameter)*)? ')' ('as' retType=Type)? 
+    'function' '(' (params+=ValueParameter (',' params+=ValueParameter)*)? ')' ('as' retType=Type)?
     '{' body+=Statement* '}'
 ;
 
+/* Grammar extension 'StringTemplate' provided by ZenUtils */
+/* See https://github.com/friendlyhj/ZenUtils/wiki/TemplateString */
 StringTemplate returns StringTemplate:
     // Either just the full content
     content+=TEMPLATE_LITERAL_FULL |
     // Or template literal parts with expressions in between
     (
-        content+=TEMPLATE_LITERAL_START 
+        content+=TEMPLATE_LITERAL_START
         content+=Expression?
         (
             content+=TEMPLATE_LITERAL_MIDDLE
@@ -378,9 +387,11 @@ UnquotedString returns UnquotedString:
 
 //region Type
 Type returns Type:
-    PrimaryType 
+    PrimaryType
     (   '['
-        ( ({MapType.value=current} key=Type ']' ('$' orderly?='orderly')?) 
+        /* Grammar extension '$orderly' provided by ZenUtils */
+        /* See https://github.com/friendlyhj/ZenUtils/wiki/OrderlyMap */
+        ( ({MapType.value=current} key=Type ']' ('$' orderly?='orderly')?)
         | ({ArrayType.value=current} ']')
         )
     )*
